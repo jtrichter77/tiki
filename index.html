@@ -35,6 +35,13 @@ const POWERUP_TYPES = ['shield', 'rapidfire', 'bigshot'];
 const POWERUP_COLORS = { shield: '#00cfff', rapidfire: '#ffdd00', bigshot: '#ff6600' };
 const POWERUP_LABELS = { shield: 'SHIELD', rapidfire: 'RAPID', bigshot: 'BIG' };
 
+// Asteroid colors by size: large=orange/brown, medium=teal, small=red
+const ASTEROID_COLORS = {
+  3: ['#c87941', '#b06030', '#d4924e', '#a07835'],
+  2: ['#3ac8b8', '#2ab0a0', '#4adaca', '#1a9080'],
+  1: ['#e84040', '#c83030', '#ff5555', '#d04848']
+};
+
 // ========== STATE ==========
 let state = 'menu'; // menu | playing | dead | gameover
 let score = 0;
@@ -73,7 +80,9 @@ function makeAsteroid(x, y, size) {
     const r = size * 10 * randBetween(0.75, 1.25);
     verts.push({ x: Math.cos(a) * r, y: Math.sin(a) * r });
   }
-  return { x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, size, verts, rot: 0, rotSpeed: randBetween(-0.015, 0.015) };
+  const colors = ASTEROID_COLORS[size];
+  const color = colors[Math.floor(Math.random() * colors.length)];
+  return { x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, size, verts, rot: 0, rotSpeed: randBetween(-0.015, 0.015), color };
 }
 
 function spawnAsteroids() {
@@ -90,7 +99,7 @@ function spawnAsteroids() {
 }
 
 function makeShip() {
-  return { x: W / 2, y: H / 2, vx: 0, vy: 0, angle: -Math.PI / 2, thrusting: false, invincible: 120, blinkTimer: 0 };
+  return { x: W / 2, y: H / 2, vx: 0, vy: 0, angle: -Math.PI / 2, thrusting: false, reversing: false, invincible: 120, blinkTimer: 0 };
 }
 
 function makeUFO() {
@@ -209,7 +218,7 @@ function checkCollisions() {
       if (circleHit(b, b.big ? 6 : 2, a, hitR)) {
         const pts = [0, 100, 50, 20][a.size];
         score += pts;
-        spawnParticles(a.x, a.y, a.size * 5, '#aaa', 3);
+        spawnParticles(a.x, a.y, a.size * 5, a.color, 3);
         spawnPowerup(a.x, a.y);
         if (a.size > 1) {
           for (let k = 0; k < 2; k++) asteroids.push(makeAsteroid(a.x + randBetween(-10, 10), a.y + randBetween(-10, 10), a.size - 1));
@@ -300,9 +309,14 @@ function update() {
   if (keys['ArrowRight'] || keys['KeyD']) ship.angle += SHIP_ROT_SPEED;
 
   ship.thrusting = keys['ArrowUp'] || keys['KeyW'];
+  ship.reversing = keys['ArrowDown'] || keys['KeyS'];
   if (ship.thrusting) {
     ship.vx += Math.cos(ship.angle) * SHIP_THRUST;
     ship.vy += Math.sin(ship.angle) * SHIP_THRUST;
+  }
+  if (ship.reversing) {
+    ship.vx -= Math.cos(ship.angle) * SHIP_THRUST * 0.65;
+    ship.vy -= Math.sin(ship.angle) * SHIP_THRUST * 0.65;
   }
 
   ship.vx *= SHIP_FRICTION;
@@ -418,7 +432,7 @@ function drawShip() {
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Thruster flame
+  // Forward thruster flame (rear of ship)
   if (ship.thrusting && Math.random() > 0.3) {
     ctx.beginPath();
     ctx.moveTo(-SHIP_SIZE * 0.4, -SHIP_SIZE * 0.25);
@@ -426,6 +440,24 @@ function drawShip() {
     ctx.lineTo(-SHIP_SIZE * 0.4, SHIP_SIZE * 0.25);
     ctx.strokeStyle = Math.random() > 0.5 ? '#ff8800' : '#ffee00';
     ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+
+  // Reverse thruster flame (two jets at nose, blue/cyan)
+  if (ship.reversing && Math.random() > 0.3) {
+    const jx = SHIP_SIZE * 0.85;
+    const flareLen = SHIP_SIZE * (0.4 + Math.random() * 0.4);
+    ctx.strokeStyle = Math.random() > 0.5 ? '#00aaff' : '#00ddff';
+    ctx.lineWidth = 1.5;
+    // top jet
+    ctx.beginPath();
+    ctx.moveTo(jx, -SHIP_SIZE * 0.18);
+    ctx.lineTo(jx + flareLen, -SHIP_SIZE * 0.38);
+    ctx.stroke();
+    // bottom jet
+    ctx.beginPath();
+    ctx.moveTo(jx, SHIP_SIZE * 0.18);
+    ctx.lineTo(jx + flareLen, SHIP_SIZE * 0.38);
     ctx.stroke();
   }
 
@@ -440,8 +472,11 @@ function drawAsteroid(a) {
   ctx.moveTo(a.verts[0].x, a.verts[0].y);
   for (let i = 1; i < a.verts.length; i++) ctx.lineTo(a.verts[i].x, a.verts[i].y);
   ctx.closePath();
-  ctx.strokeStyle = '#aaa';
-  ctx.lineWidth = 1.5;
+  // Subtle dark fill for depth, bright colored stroke
+  ctx.fillStyle = a.color + '28'; // very transparent fill
+  ctx.fill();
+  ctx.strokeStyle = a.color;
+  ctx.lineWidth = 2;
   ctx.stroke();
   ctx.restore();
 }
@@ -581,13 +616,13 @@ function drawMenu() {
 
   ctx.font = '18px Courier New';
   ctx.fillStyle = '#aaa';
-  ctx.fillText('SPACE to Start  |  Arrows / WASD to move  |  SPACE / Z to fire', W / 2, H / 2 - 40);
+  ctx.fillText('SPACE to Start  |  Arrows / WASD to move  |  ↓ / S to reverse  |  SPACE / Z to fire', W / 2, H / 2 - 40);
 
   // Controls
-  const lines = ['← → / A D  Rotate', '↑ / W      Thrust', 'SPACE / Z  Fire'];
+  const lines = ['← → / A D  Rotate', '↑ / W      Thrust forward', '↓ / S      Reverse thrust', 'SPACE / Z  Fire'];
   ctx.font = '15px Courier New';
   ctx.fillStyle = '#555';
-  lines.forEach((l, i) => ctx.fillText(l, W / 2, H / 2 + 10 + i * 22));
+  lines.forEach((l, i) => ctx.fillText(l, W / 2, H / 2 + 10 + i * 20));
 
   // Power-ups legend
   ctx.font = '13px Courier New';
