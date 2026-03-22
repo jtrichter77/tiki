@@ -2,988 +2,1221 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>PARSEC — Browser Edition</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wealthbox Daily Prioritizer</title>
 <style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body {
-    background: #000;
-    width: 100%; height: 100%;
-    overflow: hidden;
-    touch-action: none;
-    font-family: 'Courier New', Courier, monospace;
-    user-select: none;
-    -webkit-user-select: none;
+  :root {
+    --bg-deep:    #0d1117;
+    --bg-card:    #161b27;
+    --bg-panel:   #1e2535;
+    --bg-hover:   #252d3d;
+    --border:     #2a3347;
+    --accent:     #4a9eff;
+    --accent-dim: #1d4f8c;
+    --text-pri:   #e6edf3;
+    --text-sec:   #8b949e;
+    --text-muted: #525967;
+    --red:        #f85149;
+    --orange:     #e3954a;
+    --yellow:     #d4a726;
+    --green:      #3fb950;
+    --tag-bg:     #1d3048;
+    --tag-text:   #79c0ff;
+    --radius:     10px;
+    --radius-sm:  6px;
+    --shadow:     0 4px 16px rgba(0,0,0,0.4);
   }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg-deep);
+    color: var(--text-pri);
+    min-height: 100vh;
+    line-height: 1.5;
   }
 
-  /* ── Canvas wrapper ── */
-  #wrap {
-    position: relative;
-    width: 100%;
-    max-width: 800px;
-    flex-shrink: 0;
+  /* ── SETUP ─────────────────────────────────────────────── */
+  #setup-screen { display:flex; align-items:center; justify-content:center; min-height:100vh; padding:24px; }
+  .setup-card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 16px; padding: 48px 40px; max-width: 480px;
+    width: 100%; box-shadow: var(--shadow);
   }
-  canvas {
-    display: block;
-    width: 100%;
-    /* height is set by JS to maintain 800:480 ratio */
-    border: 2px solid #333;
-    image-rendering: pixelated;
-    touch-action: none;
+  .setup-logo { display:flex; align-items:center; gap:12px; margin-bottom:32px; }
+  .setup-logo .logo-icon {
+    width:44px; height:44px;
+    background: linear-gradient(135deg, var(--accent), #2563eb);
+    border-radius:10px; display:flex; align-items:center; justify-content:center; font-size:22px;
   }
+  .setup-logo h1 { font-size:22px; font-weight:700; }
+  .setup-logo p  { font-size:12px; color:var(--text-sec); margin-top:1px; }
+  .setup-card h2 { font-size:18px; font-weight:600; margin-bottom:8px; }
+  .setup-card .subtitle { color:var(--text-sec); font-size:14px; margin-bottom:28px; line-height:1.6; }
+  .form-group { margin-bottom:20px; }
+  .form-group label {
+    display:block; font-size:13px; font-weight:500; color:var(--text-sec);
+    margin-bottom:8px; text-transform:uppercase; letter-spacing:0.06em;
+  }
+  .form-group input {
+    width:100%; background:var(--bg-deep); border:1px solid var(--border);
+    border-radius:var(--radius-sm); padding:12px 16px; color:var(--text-pri);
+    font-size:14px; font-family:'Courier New',monospace; outline:none; transition:border-color 0.2s;
+  }
+  .form-group input:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(74,158,255,0.15); }
+  .form-group input::placeholder { color:var(--text-muted); font-family:system-ui; }
+  .hint { font-size:12px; color:var(--text-muted); margin-top:8px; display:flex; align-items:flex-start; gap:6px; }
+  .hint svg { flex-shrink:0; margin-top:1px; }
 
-  /* ── Keyboard hint (hidden on touch) ── */
-  #kb-hint {
-    color: #555;
-    font-size: 12px;
-    margin-top: 6px;
-    letter-spacing: 1px;
-    text-align: center;
-    flex-shrink: 0;
+  /* ── BUTTONS ─────────────────────────────────────────── */
+  .btn {
+    display:inline-flex; align-items:center; justify-content:center;
+    gap:8px; padding:11px 20px; border-radius:var(--radius-sm);
+    border:none; font-size:14px; font-weight:500; cursor:pointer;
+    transition:all 0.15s; font-family:inherit;
   }
+  .btn-primary { background:var(--accent); color:#fff; width:100%; }
+  .btn-primary:hover { background:#6aafff; }
+  .btn-primary:active { transform:scale(0.98); }
+  .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+  .status-msg { margin-top:16px; padding:10px 14px; border-radius:var(--radius-sm); font-size:13px; display:none; }
+  .status-msg.success { background:rgba(63,185,80,0.12); border:1px solid rgba(63,185,80,0.3); color:var(--green); display:flex; align-items:center; gap:8px; }
+  .status-msg.error   { background:rgba(248,81,73,0.12); border:1px solid rgba(248,81,73,0.3); color:var(--red); display:flex; align-items:flex-start; gap:8px; }
 
-  /* ── Mobile controls panel ── */
-  #mobile-pad {
-    display: none;
-    width: 100%;
-    max-width: 800px;
-    padding: 6px 14px 4px;
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-    flex-shrink: 0;
-    gap: 10px;
-  }
+  /* ── APP ──────────────────────────────────────────────── */
+  #app-screen { display:none; flex-direction:column; min-height:100vh; }
 
-  /* D-pad */
-  #dpad {
-    display: grid;
-    grid-template-areas:
-      ". up ."
-      "lt ct rt"
-      ". dn .";
-    grid-template-columns: 56px 56px 56px;
-    grid-template-rows: 56px 56px 56px;
-    gap: 4px;
+  /* Header */
+  .header { background:var(--bg-card); border-bottom:1px solid var(--border); padding:0 24px; position:sticky; top:0; z-index:100; }
+  .header-top { display:flex; align-items:center; gap:16px; padding:14px 0; flex-wrap:wrap; }
+  .header-brand { display:flex; align-items:center; gap:10px; flex:1; min-width:200px; }
+  .header-brand .logo-sm {
+    width:32px; height:32px;
+    background:linear-gradient(135deg,var(--accent),#2563eb);
+    border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:16px; flex-shrink:0;
   }
-  .db {
-    background: rgba(255,255,255,0.07);
-    border: 2px solid rgba(255,200,0,0.35);
-    border-radius: 10px;
-    color: #FFD700;
-    font-size: 24px;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: none;
-    user-select: none;
-    transition: background 0.08s;
+  .header-brand h1 { font-size:17px; font-weight:700; }
+  .header-meta { font-size:13px; color:var(--text-sec); }
+  .header-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .badge-group { display:flex; gap:8px; }
+  .badge { padding:4px 12px; border-radius:20px; font-size:12px; font-weight:600; white-space:nowrap; }
+  .badge-overdue { background:rgba(248,81,73,0.15); color:var(--red); border:1px solid rgba(248,81,73,0.3); }
+  .badge-today   { background:rgba(74,158,255,0.15); color:var(--accent); border:1px solid rgba(74,158,255,0.3); }
+  .btn-icon {
+    background:var(--bg-panel); color:var(--text-sec); border:1px solid var(--border);
+    padding:7px 14px; font-size:13px; border-radius:var(--radius-sm); cursor:pointer; font-family:inherit;
   }
-  .db:active, .db.pressed { background: rgba(255,200,0,0.22); }
-  #db-u { grid-area: up; }
-  #db-l { grid-area: lt; }
-  #db-c { grid-area: ct; background: transparent; border: none; }
-  #db-r { grid-area: rt; }
-  #db-d { grid-area: dn; }
+  .btn-icon:hover { background:var(--bg-hover); color:var(--text-pri); }
+  .btn-link { background:none; border:none; color:var(--text-muted); font-size:13px; cursor:pointer; text-decoration:underline; font-family:inherit; }
+  .btn-link:hover { color:var(--red); }
 
-  /* Center buttons (pause) */
-  #center-btns {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
+  /* Filter bar */
+  .filter-bar {
+    background:var(--bg-card); border-bottom:1px solid var(--border);
+    padding:10px 24px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;
   }
-  #btn-pause {
-    width: 60px; height: 40px;
-    background: rgba(255,255,255,0.07);
-    border: 1px solid #444;
-    border-radius: 8px;
-    color: #999;
-    font-size: 18px;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: none;
+  .filter-label { font-size:12px; color:var(--text-muted); font-weight:500; text-transform:uppercase; letter-spacing:0.06em; white-space:nowrap; }
+  .chip {
+    padding:4px 12px; border-radius:20px; font-size:12px; font-weight:500;
+    cursor:pointer; border:1px solid var(--border); background:var(--bg-panel); color:var(--text-sec);
+    transition:all 0.15s; white-space:nowrap;
   }
-  #btn-pause:active { background: rgba(255,255,255,0.15); }
+  .chip:hover { background:var(--bg-hover); color:var(--text-pri); }
+  .chip.active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
+  .chip.overdue-chip.active { background:rgba(248,81,73,0.15); border-color:var(--red); color:var(--red); }
+  .chip-sep { width:1px; height:20px; background:var(--border); margin:0 4px; }
 
-  /* Fire button */
-  #btn-fire {
-    width: 100px; height: 100px;
-    background: rgba(255,40,40,0.15);
-    border: 3px solid rgba(255,80,80,0.55);
-    border-radius: 50%;
-    color: #FF5555;
-    font-size: 15px;
-    font-weight: bold;
-    font-family: 'Courier New', monospace;
-    letter-spacing: 1px;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
-    touch-action: none;
-    user-select: none;
-    transition: background 0.08s;
-  }
-  #btn-fire:active, #btn-fire.pressed {
-    background: rgba(255,60,60,0.38);
-    border-color: rgba(255,100,100,0.9);
-  }
+  /* Main content */
+  .main-content { padding:24px; max-width:900px; margin:0 auto; width:100%; flex:1; }
 
-  /* Show on touch devices */
-  @media (pointer: coarse) {
-    #mobile-pad { display: flex; }
-    #kb-hint    { display: none; }
+  /* Loading / error / empty */
+  .loading-state { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:80px 24px; gap:16px; color:var(--text-sec); font-size:14px; }
+  .spinner { width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
+  .spinner-sm { width:16px; height:16px; border:2px solid rgba(255,255,255,0.2); border-top-color:#fff; border-radius:50%; animation:spin 0.8s linear infinite; display:inline-block; flex-shrink:0; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  .error-state { background:rgba(248,81,73,0.08); border:1px solid rgba(248,81,73,0.25); border-radius:var(--radius); padding:20px 24px; margin-bottom:24px; font-size:14px; color:var(--red); display:none; }
+  .error-state.show { display:block; }
+  .error-state strong { display:block; margin-bottom:6px; font-size:15px; }
+  .error-state p { color:var(--text-sec); line-height:1.6; }
+  .error-state code { background:var(--bg-deep); padding:2px 6px; border-radius:4px; font-size:12px; color:var(--yellow); }
+  .empty-state { text-align:center; padding:80px 24px; color:var(--text-sec); }
+  .empty-state .emoji { font-size:48px; margin-bottom:16px; }
+  .empty-state h3 { font-size:18px; font-weight:600; color:var(--text-pri); margin-bottom:8px; }
+  .empty-state p { font-size:14px; }
+
+  /* Priority groups */
+  .priority-group { margin-bottom:32px; }
+  .priority-header { display:flex; align-items:center; gap:10px; margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid var(--border); }
+  .priority-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+  .priority-dot.critical { background:var(--red); box-shadow:0 0 6px var(--red); }
+  .priority-dot.high     { background:var(--orange); }
+  .priority-dot.medium   { background:var(--yellow); }
+  .priority-dot.normal   { background:var(--text-muted); }
+  .priority-title { font-size:13px; font-weight:600; text-transform:uppercase; letter-spacing:0.08em; }
+  .priority-count { margin-left:auto; font-size:12px; color:var(--text-muted); background:var(--bg-panel); border:1px solid var(--border); padding:2px 8px; border-radius:10px; }
+
+  /* Task card */
+  .task-card {
+    background:var(--bg-card); border:1px solid var(--border);
+    border-radius:var(--radius); padding:16px 18px; margin-bottom:10px;
+    transition:transform 0.15s, opacity 0.15s, border-color 0.15s;
+    position:relative; overflow:hidden;
+  }
+  .task-card:hover { border-color:#3a4257; }
+  .task-card.completing { transform:translateX(40px); opacity:0; transition:transform 0.35s ease, opacity 0.35s ease; }
+  .task-card[data-priority="critical"] { border-left:3px solid var(--red); }
+  .task-card[data-priority="high"]     { border-left:3px solid var(--orange); }
+  .task-card[data-priority="medium"]   { border-left:3px solid var(--yellow); }
+
+  .task-card-header { display:flex; align-items:flex-start; gap:12px; margin-bottom:8px; }
+  .task-card-left { flex:1; min-width:0; }
+  .task-name { font-size:15px; font-weight:600; color:var(--text-pri); line-height:1.4; flex:1; min-width:0; word-break:break-word; }
+  .task-card-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+
+  .btn-complete {
+    background:rgba(63,185,80,0.1); border:1px solid rgba(63,185,80,0.3); color:var(--green);
+    border-radius:var(--radius-sm); padding:6px 14px; font-size:12px; font-weight:600;
+    cursor:pointer; white-space:nowrap; font-family:inherit; transition:all 0.15s;
+  }
+  .btn-complete:hover { background:rgba(63,185,80,0.2); border-color:var(--green); }
+  .btn-complete:disabled { opacity:0.5; cursor:not-allowed; }
+
+  .btn-edit {
+    background:var(--bg-panel); border:1px solid var(--border); color:var(--text-sec);
+    border-radius:var(--radius-sm); padding:6px 10px; font-size:13px;
+    cursor:pointer; font-family:inherit; transition:all 0.15s; line-height:1;
+  }
+  .btn-edit:hover { background:var(--bg-hover); color:var(--accent); border-color:var(--accent); }
+  .btn-edit.active { background:var(--accent-dim); border-color:var(--accent); color:var(--accent); }
+
+  .task-meta { display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:12px; }
+  .task-due { font-size:12px; font-weight:500; }
+  .task-due.overdue { color:var(--red); }
+  .task-due.today   { color:var(--text-sec); }
+  .overdue-badge { background:rgba(248,81,73,0.15); color:var(--red); border:1px solid rgba(248,81,73,0.3); padding:1px 7px; border-radius:4px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; }
+  .category-pill { padding:2px 10px; border-radius:20px; font-size:11px; font-weight:500; background:rgba(74,158,255,0.12); color:var(--accent); border:1px solid rgba(74,158,255,0.25); }
+  .tag-chip { background:var(--tag-bg); color:var(--tag-text); border:1px solid rgba(121,192,255,0.2); padding:2px 8px; border-radius:4px; font-size:11px; }
+  .linked-name { color:var(--text-muted); font-size:12px; display:flex; align-items:center; gap:4px; }
+
+  .task-desc-toggle {
+    background:none; border:none; color:var(--text-muted); font-size:12px; cursor:pointer;
+    padding:0; font-family:inherit; margin-top:8px; display:flex; align-items:center; gap:4px;
+  }
+  .task-desc-toggle:hover { color:var(--text-sec); }
+  .task-desc { margin-top:8px; padding:10px 14px; background:var(--bg-deep); border-left:3px solid var(--border); border-radius:0 var(--radius-sm) var(--radius-sm) 0; font-size:13px; color:var(--text-sec); line-height:1.6; display:none; }
+  .task-desc.open { display:block; }
+
+  /* ── INLINE EDIT PANEL ─────────────────────────────────── */
+  .edit-panel {
+    display:none;
+    margin-top:14px;
+    padding:16px;
+    background:var(--bg-deep);
+    border:1px solid var(--border);
+    border-radius:var(--radius-sm);
+  }
+  .edit-panel.open { display:block; }
+  .edit-panel-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:12px; }
+  @media(max-width:560px) { .edit-panel-grid { grid-template-columns:1fr; } }
+  .edit-field { display:flex; flex-direction:column; gap:5px; }
+  .edit-field-full { display:flex; flex-direction:column; gap:5px; margin-bottom:12px; }
+  .edit-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.07em; color:var(--text-muted); }
+  .edit-input, .edit-select, .edit-textarea {
+    background:var(--bg-panel); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:8px 10px; color:var(--text-pri); font-size:13px; font-family:inherit; outline:none;
+    transition:border-color 0.2s; width:100%;
+  }
+  .edit-input:focus, .edit-select:focus, .edit-textarea:focus { border-color:var(--accent); box-shadow:0 0 0 2px rgba(74,158,255,0.12); }
+  .edit-textarea { resize:vertical; min-height:80px; line-height:1.6; }
+  .edit-select { cursor:pointer; }
+  .edit-select option { background:var(--bg-panel); }
+  .edit-actions { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .btn-save-edit {
+    background:var(--accent); color:#fff; border:none; border-radius:var(--radius-sm);
+    padding:7px 18px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;
+    transition:background 0.15s; display:flex; align-items:center; gap:6px;
+  }
+  .btn-save-edit:hover { background:#6aafff; }
+  .btn-save-edit:disabled { opacity:0.5; cursor:not-allowed; }
+  .btn-cancel-edit {
+    background:var(--bg-panel); color:var(--text-sec); border:1px solid var(--border);
+    border-radius:var(--radius-sm); padding:7px 14px; font-size:13px; cursor:pointer;
+    font-family:inherit; transition:all 0.15s;
+  }
+  .btn-cancel-edit:hover { background:var(--bg-hover); color:var(--text-pri); }
+  .edit-feedback {
+    font-size:12px; padding:6px 10px; border-radius:var(--radius-sm); display:none;
+    align-items:center; gap:6px;
+  }
+  .edit-feedback.success { display:flex; background:rgba(63,185,80,0.12); border:1px solid rgba(63,185,80,0.3); color:var(--green); }
+  .edit-feedback.error   { display:flex; background:rgba(248,81,73,0.12); border:1px solid rgba(248,81,73,0.3); color:var(--red); }
+
+  /* ── MODAL ─────────────────────────────────────────────── */
+  .modal-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,0.65); z-index:200;
+    display:flex; align-items:center; justify-content:center; padding:24px;
+    backdrop-filter:blur(4px); opacity:0; pointer-events:none; transition:opacity 0.2s;
+  }
+  .modal-overlay.open { opacity:1; pointer-events:all; }
+  .modal {
+    background:var(--bg-card); border:1px solid var(--border); border-radius:16px;
+    padding:28px; max-width:580px; width:100%; max-height:85vh; overflow-y:auto;
+    box-shadow:0 20px 60px rgba(0,0,0,0.6); transform:translateY(16px); transition:transform 0.2s;
+  }
+  .modal-overlay.open .modal { transform:translateY(0); }
+  .modal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; }
+  .modal-header h2 { font-size:18px; font-weight:700; }
+  .btn-close {
+    background:var(--bg-panel); border:1px solid var(--border); color:var(--text-sec);
+    width:30px; height:30px; border-radius:6px; cursor:pointer; font-size:16px;
+    display:flex; align-items:center; justify-content:center; flex-shrink:0;
+  }
+  .btn-close:hover { background:var(--bg-hover); color:var(--text-pri); }
+  .modal-subtitle { font-size:13px; color:var(--text-sec); margin-bottom:24px; line-height:1.6; }
+
+  /* Rule builder */
+  .rule-builder { background:var(--bg-panel); border:1px solid var(--border); border-radius:var(--radius); padding:16px; margin-bottom:20px; }
+  .rule-builder-label { font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.07em; color:var(--text-muted); margin-bottom:12px; }
+  .rule-inputs { display:flex; gap:8px; flex-wrap:wrap; align-items:flex-end; }
+  .rule-inputs select, .rule-inputs input[type="text"] {
+    background:var(--bg-deep); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:8px 10px; color:var(--text-pri); font-size:13px; font-family:inherit;
+    outline:none; transition:border-color 0.2s;
+  }
+  .rule-inputs select:focus, .rule-inputs input[type="text"]:focus { border-color:var(--accent); }
+  .rule-inputs select { cursor:pointer; }
+  .rule-inputs input[type="text"] { flex:1; min-width:120px; }
+  .btn-add-rule {
+    background:var(--accent); color:#fff; border:none; border-radius:var(--radius-sm);
+    padding:8px 16px; font-size:13px; font-weight:500; cursor:pointer; white-space:nowrap;
+    font-family:inherit; transition:background 0.15s;
+  }
+  .btn-add-rule:hover { background:#6aafff; }
+  .rules-list { display:flex; flex-direction:column; gap:8px; margin-bottom:20px; min-height:40px; }
+  .rule-item {
+    background:var(--bg-panel); border:1px solid var(--border); border-radius:var(--radius-sm);
+    padding:10px 14px; display:flex; align-items:center; gap:10px; cursor:grab;
+  }
+  .rule-item:active { cursor:grabbing; }
+  .drag-handle { color:var(--text-muted); font-size:14px; cursor:grab; flex-shrink:0; }
+  .rule-desc { flex:1; font-size:13px; color:var(--text-sec); }
+  .rule-desc strong { color:var(--text-pri); }
+  .rule-priority-badge { padding:2px 8px; border-radius:4px; font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.05em; flex-shrink:0; }
+  .rule-priority-badge.critical { background:rgba(248,81,73,0.2);  color:var(--red);    }
+  .rule-priority-badge.high     { background:rgba(227,149,74,0.2); color:var(--orange); }
+  .rule-priority-badge.medium   { background:rgba(212,167,38,0.2); color:var(--yellow); }
+  .rule-priority-badge.normal   { background:var(--bg-hover);      color:var(--text-sec); }
+  .btn-del-rule {
+    background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:15px;
+    line-height:1; flex-shrink:0; padding:2px; border-radius:4px; transition:color 0.15s;
+  }
+  .btn-del-rule:hover { color:var(--red); }
+  .empty-rules { text-align:center; color:var(--text-muted); font-size:13px; padding:16px; }
+  .modal-footer { display:flex; justify-content:flex-end; gap:10px; padding-top:16px; border-top:1px solid var(--border); }
+  .btn-secondary { background:var(--bg-panel); color:var(--text-sec); border:1px solid var(--border); }
+  .btn-secondary:hover { background:var(--bg-hover); color:var(--text-pri); }
+  .btn-save { background:var(--accent); color:#fff; border:none; padding:9px 20px; }
+  .btn-save:hover { background:#6aafff; }
+  .rule-item.drag-over { border-color:var(--accent); background:var(--bg-hover); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width:6px; }
+  ::-webkit-scrollbar-track { background:var(--bg-deep); }
+  ::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+
+  @media(max-width:600px) {
+    .header-top { gap:10px; }
+    .main-content { padding:16px; }
+    .rule-inputs { flex-direction:column; }
+    .rule-inputs select, .rule-inputs input[type="text"], .btn-add-rule { width:100%; }
+    .setup-card { padding:32px 24px; }
+    .task-card-actions { flex-wrap:wrap; }
   }
 </style>
 </head>
 <body>
 
-<div id="wrap">
-  <canvas id="c" width="800" height="480"></canvas>
+<!-- ══ SETUP SCREEN ═════════════════════════════════════════ -->
+<div id="setup-screen">
+  <div class="setup-card">
+    <div class="setup-logo">
+      <div class="logo-icon">📋</div>
+      <div>
+        <h1>Wealthbox Daily Prioritizer</h1>
+        <p>Task management for financial advisors</p>
+      </div>
+    </div>
+    <h2>Connect to Wealthbox</h2>
+    <p class="subtitle">Enter your Wealthbox API token to load and prioritize your tasks. Your token is stored only in your browser's local storage and never transmitted anywhere except Wealthbox.</p>
+    <div class="form-group">
+      <label>Wealthbox API Token</label>
+      <input type="password" id="token-input" placeholder="Paste your API token here…" autocomplete="off" spellcheck="false">
+      <div class="hint">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="8" cy="8" r="7"/><line x1="8" y1="7" x2="8" y2="11"/><circle cx="8" cy="5" r="0.5" fill="currentColor"/></svg>
+        Find your token in Wealthbox → Settings → API Access
+      </div>
+    </div>
+    <button class="btn btn-primary" id="connect-btn" onclick="handleConnect()">
+      <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 3l5 5-5 5M14 8H3"/><circle cx="3" cy="8" r="1.5"/></svg>
+      Save &amp; Connect
+    </button>
+    <div class="status-msg" id="setup-status"></div>
+  </div>
 </div>
 
-<div id="kb-hint">ARROWS / WASD: Move &nbsp;|&nbsp; SPACE or Z: Fire &nbsp;|&nbsp; P: Pause</div>
-
-<!-- Mobile controls -->
-<div id="mobile-pad">
-  <div id="dpad">
-    <div class="db" id="db-u">▲</div>
-    <div class="db" id="db-l">◄</div>
-    <div id="db-c"></div>
-    <div class="db" id="db-r">►</div>
-    <div class="db" id="db-d">▼</div>
+<!-- ══ APP SCREEN ══════════════════════════════════════════ -->
+<div id="app-screen">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-top">
+      <div class="header-brand">
+        <div class="logo-sm">📋</div>
+        <div>
+          <h1>Wealthbox Daily Prioritizer</h1>
+          <div class="header-meta" id="header-date"></div>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="badge-group">
+          <span class="badge badge-overdue" id="badge-overdue">0 Overdue</span>
+          <span class="badge badge-today"   id="badge-today">0 Due Today</span>
+        </div>
+        <button class="btn btn-icon" onclick="loadTasks()">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M14 8A6 6 0 1 1 8 2" stroke-linecap="round"/><polyline points="14,2 14,8 8,8"/></svg>
+          Refresh
+        </button>
+        <button class="btn btn-icon" onclick="openModal()">⚙ Rules</button>
+        <button class="btn-link" onclick="disconnect()">Disconnect</button>
+      </div>
+    </div>
   </div>
 
-  <div id="center-btns">
-    <div id="btn-pause">⏸</div>
+  <!-- Filter bar -->
+  <div class="filter-bar" id="filter-bar">
+    <span class="filter-label">Filter:</span>
+    <div id="filter-chips" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <span class="chip active" data-filter="all" onclick="toggleFilter(this,'all')">All</span>
+    </div>
+    <div class="chip-sep"></div>
+    <span class="chip overdue-chip" id="overdue-filter-chip" onclick="toggleOverdueFilter(this)">🔴 Overdue only</span>
   </div>
 
-  <div id="btn-fire">FIRE</div>
+  <!-- Main content -->
+  <div class="main-content">
+    <div class="error-state" id="error-state">
+      <strong id="error-title">Error</strong>
+      <p id="error-msg"></p>
+    </div>
+    <div id="tasks-container"></div>
+  </div>
+</div>
+
+<!-- ══ RULES MODAL ═══════════════════════════════════════ -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModalOnOverlay(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>⚙ Priority Rules</h2>
+      <button class="btn-close" onclick="closeModal()">✕</button>
+    </div>
+    <p class="modal-subtitle">Rules are checked in order — the first match wins. Tasks with no matching rule default to <strong>Normal</strong> priority.</p>
+    <div class="rule-builder">
+      <div class="rule-builder-label">Add a rule</div>
+      <div class="rule-inputs">
+        <select id="rule-field">
+          <option value="category">Category</option>
+          <option value="tag">Tag</option>
+          <option value="name">Name contains</option>
+        </select>
+        <select id="rule-operator">
+          <option value="equals">equals</option>
+          <option value="contains">contains</option>
+        </select>
+        <input type="text" id="rule-value" placeholder="Value…">
+        <select id="rule-priority">
+          <option value="critical">🔴 Critical</option>
+          <option value="high">🟠 High</option>
+          <option value="medium">🟡 Medium</option>
+          <option value="normal">⚪ Normal</option>
+        </select>
+        <button class="btn-add-rule" onclick="addRule()">+ Add Rule</button>
+      </div>
+    </div>
+    <div class="rules-list" id="rules-list"></div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-save" onclick="saveRules()">Save Rules</button>
+    </div>
+  </div>
 </div>
 
 <script>
-"use strict";
-// ─────────────────────────────────────────────────────────────────────────────
-// PARSEC – Browser Edition   (mobile-friendly version)
-// Inspired by the classic TI-99/4A game by Texas Instruments (1982)
-// ─────────────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════
+//  CONSTANTS & STATE
+// ══════════════════════════════════════════════════════════
+const API_BASE = 'https://api.crmworkspace.com/v1';
 
-const C   = document.getElementById('c');
-const ctx = C.getContext('2d');
-const W   = 800;
-const H   = 480;
-const HUD_H = 32;
+const state = {
+  token: '',
+  tasks: [],
+  rules: [],
+  wbUsers: [],          // [{id, name}] fetched once from /users
+  usersLoaded: false,
+  activeFilter: 'all',
+  overdueOnly: false,
+  draggingIndex: null,
+};
 
-// ─── Responsive canvas sizing ─────────────────────────────────────────────────
-function fitCanvas() {
-  const wrap = document.getElementById('wrap');
-  const pad  = document.getElementById('mobile-pad');
-  const isTouch = window.matchMedia('(pointer: coarse)').matches;
-
-  if (isTouch) {
-    // Available height minus controls panel
-    const padH   = pad.offsetHeight || 0;
-    const avail  = window.innerHeight - padH - 4;
-    const byW    = window.innerWidth;
-    const byH    = avail * (800 / 480);
-    const cssW   = Math.min(byW, byH);
-    C.style.width  = cssW + 'px';
-    C.style.height = (cssW * 480 / 800) + 'px';
-    wrap.style.width = cssW + 'px';
+// ══════════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  const saved = localStorage.getItem('wb_token');
+  const savedRules = localStorage.getItem('wb_rules');
+  if (savedRules) { try { state.rules = JSON.parse(savedRules); } catch(e) {} }
+  if (saved) {
+    state.token = saved;
+    showApp();
+    loadTasks();
   } else {
-    // Desktop: constrain to 800px max, natural viewport height
-    const maxW = Math.min(window.innerWidth, 800);
-    C.style.width  = maxW + 'px';
-    C.style.height = (maxW * 480 / 800) + 'px';
-    wrap.style.width = maxW + 'px';
+    showSetup();
   }
-  body_flex_justify();
-}
-function body_flex_justify() {
-  const isTouch = window.matchMedia('(pointer: coarse)').matches;
-  document.body.style.justifyContent = isTouch ? 'flex-start' : 'center';
-}
-
-window.addEventListener('resize', fitCanvas);
-window.addEventListener('orientationchange', () => setTimeout(fitCanvas, 200));
-// Initial fit after mobile-pad renders
-setTimeout(fitCanvas, 0);
-
-// ─── Audio Engine ─────────────────────────────────────────────────────────────
-let AC = null;
-function getAC() {
-  if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)();
-  return AC;
-}
-function tone(freq, type, dur, vol = 0.25, freqStart = null) {
-  try {
-    const ac = getAC();
-    const o = ac.createOscillator();
-    const g = ac.createGain();
-    o.connect(g); g.connect(ac.destination);
-    o.type = type;
-    const t = ac.currentTime;
-    o.frequency.setValueAtTime(freqStart || freq, t);
-    if (freqStart) o.frequency.exponentialRampToValueAtTime(freq, t + dur);
-    g.gain.setValueAtTime(vol, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    o.start(t); o.stop(t + dur);
-  } catch(e) {}
-}
-function noise(dur, vol = 0.4) {
-  try {
-    const ac = getAC();
-    const len = Math.floor(ac.sampleRate * dur);
-    const buf = ac.createBuffer(1, len, ac.sampleRate);
-    const d = buf.getChannelData(0);
-    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
-    const src = ac.createBufferSource();
-    const g = ac.createGain();
-    src.buffer = buf; src.connect(g); g.connect(ac.destination);
-    g.gain.value = vol; src.start();
-  } catch(e) {}
-}
-function sfxShoot()    { tone(900, 'square', 0.07, 0.12, 1400); }
-function sfxExplosion(big) { noise(big ? 0.5 : 0.25, big ? 0.5 : 0.3); tone(80, 'sawtooth', 0.3, 0.15, 200); }
-function sfxHit()      { tone(220, 'sawtooth', 0.12, 0.18, 440); }
-function sfxRefuel()   { if (Math.random() < 0.25) tone(523 + Math.random() * 200, 'sine', 0.04, 0.08); }
-function sfxLevelUp()  {
-  [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => tone(f, 'square', 0.12, 0.18), i * 110));
-}
-function sfxGameOver() { tone(220, 'sawtooth', 0.6, 0.3, 440); }
-
-// ─── Keyboard Input ───────────────────────────────────────────────────────────
-const keys = {};
-document.addEventListener('keydown', e => {
-  keys[e.code] = true;
-  if (e.code === 'Space') e.preventDefault();
-  if (e.code === 'KeyP') {
-    if (gs && gs.state === 'play')  gs.state = 'pause';
-    else if (gs && gs.state === 'pause') gs.state = 'play';
-  }
-  if (['Enter','Space','KeyZ'].includes(e.code)) {
-    if (!gs || gs.state === 'title' || gs.state === 'over') {
-      getAC().resume().then(startGame);
-    }
-  }
+  setHeaderDate();
+  const inp = document.getElementById('token-input');
+  if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') handleConnect(); });
 });
-document.addEventListener('keyup', e => { keys[e.code] = false; });
 
-// ─── Mobile / Touch Input ─────────────────────────────────────────────────────
-// Virtual joystick state (for canvas-direct touch on the game area)
-const joy = { active: false, id: -1, cx: 0, cy: 0, dx: 0, dy: 0 };
-const fireT = { active: false, id: -1 };
-
-// Helper: screen coords → canvas game coords
-function screenToCanvas(clientX, clientY) {
-  const r  = C.getBoundingClientRect();
-  return {
-    x: (clientX - r.left) * (W / r.width),
-    y: (clientY - r.top)  * (H / r.height),
-  };
+// ══════════════════════════════════════════════════════════
+//  VIEWS
+// ══════════════════════════════════════════════════════════
+function showSetup() {
+  document.getElementById('setup-screen').style.display = 'flex';
+  document.getElementById('app-screen').style.display = 'none';
+}
+function showApp() {
+  document.getElementById('setup-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'flex';
+}
+function setHeaderDate() {
+  const opts = { weekday:'long', year:'numeric', month:'long', day:'numeric' };
+  document.getElementById('header-date').textContent = new Date().toLocaleDateString(undefined, opts);
 }
 
-// Canvas touch — title/gameover tap-to-start + in-game virtual joystick + right-side fire
-C.addEventListener('touchstart', e => {
-  e.preventDefault();
-  getAC().resume();
-  if (!gs || gs.state === 'title' || gs.state === 'over') { startGame(); return; }
-  if (gs.state === 'pause') { gs.state = 'play'; return; }
-
-  for (const t of e.changedTouches) {
-    const gc = screenToCanvas(t.clientX, t.clientY);
-    if (gc.x < W * 0.55 && !joy.active) {
-      // Left area: joystick
-      Object.assign(joy, { active: true, id: t.identifier, cx: t.clientX, cy: t.clientY, dx: 0, dy: 0 });
-    } else if (gc.x >= W * 0.55 && !fireT.active) {
-      // Right area: fire
-      Object.assign(fireT, { active: true, id: t.identifier });
-      keys['Space'] = true;
+// ══════════════════════════════════════════════════════════
+//  AUTH
+// ══════════════════════════════════════════════════════════
+async function handleConnect() {
+  const btn = document.getElementById('connect-btn');
+  const token = document.getElementById('token-input').value.trim();
+  if (!token) { showSetupStatus('error', '⚠️ Please enter your API token.'); return; }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="width:16px;height:16px;border-width:2px;display:inline-block;"></span> Connecting…';
+  document.getElementById('setup-status').className = 'status-msg';
+  document.getElementById('setup-status').style.display = 'none';
+  try {
+    const resp = await apiFetch('/tasks?per_page=1', token);
+    if (resp.status === 401) { showSetupStatus('error', '❌ Invalid token — Wealthbox returned 401 Unauthorized. Please check your token.'); return; }
+    if (!resp.ok) { showSetupStatus('error', `❌ API error: ${resp.status} ${resp.statusText}`); return; }
+    state.token = token;
+    localStorage.setItem('wb_token', token);
+    showSetupStatus('success', '✓ Connected! Loading your tasks…');
+    setTimeout(() => { showApp(); loadTasks(); }, 900);
+  } catch(err) {
+    if (isCorsLike(err)) {
+      showSetupStatus('error', `CORS error — your browser blocked the request. Serve this file from a local server instead of opening it directly:<br><br><code>python3 -m http.server 8080</code><br><br>Then visit <code>http://localhost:8080/wealthbox-tasks.html</code>`);
+    } else {
+      showSetupStatus('error', `Network error: ${err.message}`);
     }
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '&#10003; Save &amp; Connect';
   }
-}, { passive: false });
-
-C.addEventListener('touchmove', e => {
-  e.preventDefault();
-  for (const t of e.changedTouches) {
-    if (t.identifier === joy.id) {
-      joy.dx = t.clientX - joy.cx;
-      joy.dy = t.clientY - joy.cy;
-    }
-  }
-}, { passive: false });
-
-C.addEventListener('touchend', e => {
-  e.preventDefault();
-  for (const t of e.changedTouches) {
-    if (t.identifier === joy.id) {
-      joy.active = false; joy.id = -1; joy.dx = 0; joy.dy = 0;
-      keys['ArrowUp'] = keys['ArrowDown'] = keys['ArrowLeft'] = keys['ArrowRight'] = false;
-    }
-    if (t.identifier === fireT.id) {
-      fireT.active = false; fireT.id = -1;
-      keys['Space'] = false;
-    }
-  }
-}, { passive: false });
-
-C.addEventListener('touchcancel', e => {
-  joy.active = false; joy.id = -1; joy.dx = 0; joy.dy = 0;
-  fireT.active = false; fireT.id = -1;
-  keys['ArrowUp'] = keys['ArrowDown'] = keys['ArrowLeft'] = keys['ArrowRight'] = keys['Space'] = false;
-}, { passive: false });
-
-// ── D-pad HTML buttons ──
-function setupDpadBtn(id, code) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  const down = e => { e.preventDefault(); keys[code] = true;  el.classList.add('pressed'); };
-  const up   = e => { e.preventDefault(); keys[code] = false; el.classList.remove('pressed'); };
-  el.addEventListener('touchstart',  down, { passive: false });
-  el.addEventListener('touchend',    up,   { passive: false });
-  el.addEventListener('touchcancel', up,   { passive: false });
 }
-setupDpadBtn('db-u', 'ArrowUp');
-setupDpadBtn('db-d', 'ArrowDown');
-setupDpadBtn('db-l', 'ArrowLeft');
-setupDpadBtn('db-r', 'ArrowRight');
 
-// ── Fire HTML button ──
-(function() {
-  const el = document.getElementById('btn-fire');
-  if (!el) return;
-  const down = e => { e.preventDefault(); keys['Space'] = true;  el.classList.add('pressed'); getAC().resume(); };
-  const up   = e => { e.preventDefault(); keys['Space'] = false; el.classList.remove('pressed'); };
-  el.addEventListener('touchstart',  down, { passive: false });
-  el.addEventListener('touchend',    up,   { passive: false });
-  el.addEventListener('touchcancel', up,   { passive: false });
-  // Also start game on fire tap
-  el.addEventListener('touchstart', e => {
-    if (!gs || gs.state === 'title' || gs.state === 'over') { e.preventDefault(); startGame(); }
-  }, { passive: false });
-})();
+function disconnect() {
+  if (!confirm('Disconnect and clear your saved token?')) return;
+  localStorage.removeItem('wb_token');
+  state.token = '';
+  state.tasks = [];
+  state.wbUsers = [];
+  state.usersLoaded = false;
+  document.getElementById('token-input').value = '';
+  showSetup();
+}
 
-// ── Pause HTML button ──
-(function() {
-  const el = document.getElementById('btn-pause');
-  if (!el) return;
-  el.addEventListener('touchstart', e => {
-    e.preventDefault(); getAC().resume();
-    if (gs && gs.state === 'play')  gs.state = 'pause';
-    else if (gs && gs.state === 'pause') gs.state = 'play';
-  }, { passive: false });
-})();
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const clamp  = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const lerp   = (a, b, t)   => a + (b - a) * t;
-const rnd    = (lo, hi)    => lo + Math.random() * (hi - lo);
-const rndInt = (lo, hi)    => Math.floor(rnd(lo, hi + 1));
-const rectHit = (a, b) =>
-  a.x < b.x + b.w && a.x + a.w > b.x &&
-  a.y < b.y + b.h && a.y + a.h > b.y;
-
-// ─── Stars ────────────────────────────────────────────────────────────────────
-const STAR_LAYERS = [
-  { stars: [], speed: 0.3, sz: 0.8 },
-  { stars: [], speed: 0.7, sz: 1.2 },
-  { stars: [], speed: 1.4, sz: 1.8 },
-];
-(function initStars() {
-  STAR_LAYERS.forEach(layer => {
-    for (let i = 0; i < 60; i++)
-      layer.stars.push({ x: Math.random() * W, y: Math.random() * (H - HUD_H) });
+// ══════════════════════════════════════════════════════════
+//  API HELPERS
+// ══════════════════════════════════════════════════════════
+async function apiFetch(path, token, opts = {}) {
+  const t = token || state.token;
+  return fetch(`${API_BASE}${path}`, {
+    ...opts,
+    headers: {
+      'Authorization': `Bearer ${t}`,
+      'Content-Type': 'application/json',
+      ...(opts.headers || {}),
+    }
   });
-})();
-function updateStars() {
-  STAR_LAYERS.forEach(layer => {
-    layer.stars.forEach(s => {
-      s.x -= layer.speed;
-      if (s.x < 0) { s.x = W; s.y = Math.random() * (H - HUD_H); }
+}
+
+async function apiPatch(path, body) {
+  return fetch(`${API_BASE}${path}`, {
+    method: 'PATCH',
+    headers: { 'Authorization': `Bearer ${state.token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+//  LOAD TASKS
+// ══════════════════════════════════════════════════════════
+async function loadTasks() {
+  showLoading();
+  hideError();
+  state.tasks = [];
+  state.activeFilter = 'all';
+  state.overdueOnly = false;
+
+  // Load users in background (don't block task display)
+  if (!state.usersLoaded) loadUsers();
+
+  try {
+    const today = todayStr();
+    const allTasks = await fetchAllIncomplete();
+    state.tasks = allTasks.filter(t => t.due_date && t.due_date <= today);
+    renderFilterBar();
+    renderTasks();
+    updateBadges();
+  } catch(err) {
+    if (isCorsLike(err)) {
+      showError('CORS Error — Cannot Reach Wealthbox API',
+        `Your browser is blocking the request because this file is opened directly (file:// URL). To fix this, serve the file from a local web server:<br><br>
+         <code>python3 -m http.server 8080</code><br><br>
+         Then open <code>http://localhost:8080/wealthbox-tasks.html</code> in your browser.`);
+    } else if (err.message && err.message.includes('401')) {
+      showError('Authentication Failed', 'Your API token is invalid or expired. Click "Disconnect" to re-enter it.');
+    } else {
+      showError('Failed to Load Tasks', err.message || 'Unknown network error');
+    }
+    document.getElementById('tasks-container').innerHTML = '';
+  }
+}
+
+async function fetchAllIncomplete() {
+  let page = 1, all = [], hasMore = true;
+  while (hasMore) {
+    const resp = await apiFetch(`/tasks?filter[status]=incomplete&per_page=100&page=${page}`);
+    if (resp.status === 401) throw new Error('401');
+    if (!resp.ok) throw new Error(`API error ${resp.status}`);
+    const data = await resp.json();
+    const tasks = data.tasks || data.data || [];
+    all = all.concat(tasks);
+    const meta = data.meta || {};
+    const total = meta.total_count || meta.total || 0;
+    hasMore = (tasks.length === 100 && all.length < total && page < 20);
+    page++;
+  }
+  return all;
+}
+
+async function loadUsers() {
+  try {
+    const resp = await apiFetch('/users?per_page=100');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const users = data.users || data.data || [];
+    state.wbUsers = users.map(u => ({
+      id: u.id,
+      name: [u.first_name, u.last_name].filter(Boolean).join(' ') || u.name || `User ${u.id}`
+    })).filter(u => u.name);
+    state.usersLoaded = true;
+  } catch(e) {
+    // silently fail — users just get a free-text field
+    state.usersLoaded = true;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  COMPLETE A TASK
+// ══════════════════════════════════════════════════════════
+async function completeTaskHandler(id, btn) {
+  const card = document.getElementById(`task-${id}`);
+  btn.disabled = true;
+  btn.textContent = '…';
+  try {
+    const resp = await apiPatch(`/tasks/${id}`, { task: { complete: true } });
+    if (!resp.ok) throw new Error(`API error ${resp.status}`);
+    card.classList.add('completing');
+    setTimeout(() => {
+      card.style.display = 'none';
+      state.tasks = state.tasks.filter(t => t.id != id);
+      updateBadges();
+      checkEmptyGroups();
+    }, 380);
+  } catch(err) {
+    btn.disabled = false;
+    btn.textContent = '✓ Complete';
+    alert(`Failed to complete task: ${err.message}`);
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+//  EDIT A TASK (INLINE)
+// ══════════════════════════════════════════════════════════
+function toggleEditPanel(id) {
+  const panel = document.getElementById(`edit-panel-${id}`);
+  const btn   = document.getElementById(`edit-btn-${id}`);
+  const isOpen = panel.classList.contains('open');
+  if (isOpen) {
+    panel.classList.remove('open');
+    btn.classList.remove('active');
+  } else {
+    panel.classList.add('open');
+    btn.classList.add('active');
+    populateEditPanel(id);
+  }
+}
+
+function populateEditPanel(id) {
+  const task = state.tasks.find(t => t.id == id);
+  if (!task) return;
+
+  // Description / notes
+  const desc = document.getElementById(`edit-desc-${id}`);
+  if (desc) desc.value = task.description || '';
+
+  // Due date
+  const dd = document.getElementById(`edit-due-${id}`);
+  if (dd) dd.value = task.due_date || '';
+
+  // Category
+  const cat = document.getElementById(`edit-cat-${id}`);
+  if (cat) {
+    // Populate with known categories from loaded tasks
+    const cats = [...new Set(state.tasks.map(t => t.category).filter(Boolean))];
+    cat.innerHTML = `<option value="">— No category —</option>` +
+      cats.map(c => `<option value="${esc(c)}" ${c === task.category ? 'selected' : ''}>${esc(c)}</option>`).join('') +
+      (task.category && !cats.includes(task.category) ? `<option value="${esc(task.category)}" selected>${esc(task.category)}</option>` : '');
+    // Allow custom entry
+    cat.value = task.category || '';
+  }
+
+  // Assignees
+  const assigneeEl = document.getElementById(`edit-assignee-${id}`);
+  if (assigneeEl) {
+    const currentAssigneeIds = (task.assignees || []).map(a => a.id);
+    if (state.wbUsers.length > 0) {
+      // Replace text input with select
+      const selectId = `edit-assignee-sel-${id}`;
+      if (!document.getElementById(selectId)) {
+        const sel = document.createElement('select');
+        sel.id = selectId;
+        sel.className = 'edit-select';
+        sel.multiple = false;
+        sel.innerHTML = `<option value="">— Unassigned —</option>` +
+          state.wbUsers.map(u => `<option value="${u.id}" ${currentAssigneeIds.includes(u.id) ? 'selected' : ''}>${esc(u.name)}</option>`).join('');
+        assigneeEl.replaceWith(sel);
+      }
+    } else {
+      const current = (task.assignees || []).map(a => a.name || `User ${a.id}`).join(', ');
+      assigneeEl.value = current;
+    }
+  }
+}
+
+async function saveTaskEdit(id) {
+  const saveBtn = document.getElementById(`edit-save-btn-${id}`);
+  const feedback = document.getElementById(`edit-feedback-${id}`);
+
+  // Gather values
+  const desc  = (document.getElementById(`edit-desc-${id}`) || {}).value || '';
+  const due   = (document.getElementById(`edit-due-${id}`)  || {}).value || null;
+  const catEl = document.getElementById(`edit-cat-${id}`);
+  const cat   = catEl ? catEl.value : null;
+
+  // Assignee — could be select or text input
+  let assignees = undefined;
+  const selAssignee = document.getElementById(`edit-assignee-sel-${id}`);
+  const txtAssignee = document.getElementById(`edit-assignee-${id}`);
+  if (selAssignee) {
+    const val = selAssignee.value;
+    assignees = val ? [{ id: parseInt(val, 10) }] : [];
+  } else if (txtAssignee && txtAssignee.value.trim()) {
+    // free text — send as note, we can't reliably map names to IDs
+    // Try matching against loaded users
+    const input = txtAssignee.value.trim().toLowerCase();
+    const match = state.wbUsers.find(u => u.name.toLowerCase() === input);
+    if (match) assignees = [{ id: match.id }];
+    // If no match, skip (we can't send a name string to Wealthbox)
+  }
+
+  // Build patch body
+  const patch = {};
+  if (desc !== undefined) patch.description = desc;
+  if (due)  patch.due_date = due;
+  if (cat !== null) patch.category = cat || null;
+  if (assignees !== undefined) patch.assignees = assignees;
+
+  saveBtn.disabled = true;
+  saveBtn.innerHTML = '<span class="spinner-sm"></span> Saving…';
+  feedback.className = 'edit-feedback';
+
+  try {
+    const resp = await apiPatch(`/tasks/${id}`, { task: patch });
+    if (!resp.ok) {
+      const body = await resp.text();
+      throw new Error(`API error ${resp.status}: ${body}`);
+    }
+    const data = await resp.json();
+    const updated = data.task || data;
+
+    // Update local state
+    const idx = state.tasks.findIndex(t => t.id == id);
+    if (idx !== -1) {
+      state.tasks[idx] = { ...state.tasks[idx], ...updated };
+      // Re-render this card
+      refreshCard(state.tasks[idx]);
+      updateBadges();
+    }
+
+    feedback.className = 'edit-feedback success';
+    feedback.innerHTML = '✓ Saved successfully';
+    setTimeout(() => {
+      if (feedback) feedback.className = 'edit-feedback';
+      // Close panel after brief success
+      const panel = document.getElementById(`edit-panel-${id}`);
+      const btn   = document.getElementById(`edit-btn-${id}`);
+      if (panel) panel.classList.remove('open');
+      if (btn)   btn.classList.remove('active');
+    }, 1400);
+  } catch(err) {
+    feedback.className = 'edit-feedback error';
+    feedback.innerHTML = `✕ ${err.message}`;
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = 'Save Changes';
+  }
+}
+
+function refreshCard(task) {
+  const card = document.getElementById(`task-${task.id}`);
+  if (!card) return;
+  const today = todayStr();
+  const isOverdue = task.due_date && task.due_date < today;
+  const newPriority = getPriority(task);
+
+  card.setAttribute('data-priority', newPriority);
+
+  // Update name
+  const nameEl = card.querySelector('.task-name');
+  if (nameEl) nameEl.textContent = task.name || 'Untitled Task';
+
+  // Update meta row
+  const metaEl = card.querySelector('.task-meta');
+  if (metaEl) metaEl.innerHTML = buildMetaHTML(task, isOverdue);
+
+  // Update description view
+  let descView = card.querySelector('.task-desc');
+  const descToggle = card.querySelector('.task-desc-toggle');
+  if (task.description) {
+    if (!descView) {
+      const toggle = document.createElement('button');
+      toggle.className = 'task-desc-toggle';
+      toggle.id = `desc-toggle-${task.id}`;
+      toggle.onclick = () => toggleDesc(task.id);
+      toggle.innerHTML = `<svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" id="desc-icon-${task.id}"><polyline points="4,6 8,10 12,6"/></svg> Details`;
+      const div = document.createElement('div');
+      div.className = 'task-desc';
+      div.id = `desc-${task.id}`;
+      div.textContent = task.description;
+      const editPanel = card.querySelector('.edit-panel');
+      card.insertBefore(toggle, editPanel);
+      card.insertBefore(div, editPanel);
+    } else {
+      descView.textContent = task.description;
+    }
+  } else if (descView) {
+    descView.remove();
+    if (descToggle) descToggle.remove();
+  }
+}
+
+function buildMetaHTML(task, isOverdue) {
+  const today = todayStr();
+  const io = task.due_date && task.due_date < today;
+  const dateLabel = task.due_date ? (io ? `Due ${formatDate(task.due_date)}` : 'Due Today') : 'No due date';
+  const overdueEl  = io ? `<span class="overdue-badge">OVERDUE</span>` : '';
+  const dueCls     = io ? 'overdue' : 'today';
+  const catEl = task.category ? `<span class="category-pill">${esc(task.category)}</span>` : '';
+  const tagsEl = (task.tags || []).map(t => `<span class="tag-chip">${esc(t)}</span>`).join('');
+  let linkedEl = '';
+  if (task.linked_to && task.linked_to.length > 0) {
+    const first = task.linked_to[0];
+    const name = first.name || `${first.first_name||''} ${first.last_name||''}`.trim();
+    if (name) linkedEl = `<span class="linked-name"><svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="6" r="3"/><path d="M2 14c0-3.3 2.7-6 6-6s6 2.7 6 6"/></svg>${esc(name)}</span>`;
+  }
+  return `${overdueEl}<span class="task-due ${dueCls}">${dateLabel}</span>${catEl}${tagsEl}${linkedEl}`;
+}
+
+// ══════════════════════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════════════════════
+const PRIORITY_CONFIG = {
+  critical: { label: '🔴 Critical', dot: 'critical' },
+  high:     { label: '🟠 High',     dot: 'high'     },
+  medium:   { label: '🟡 Medium',   dot: 'medium'   },
+  normal:   { label: '⚪ Normal',   dot: 'normal'   },
+};
+
+function showLoading() {
+  document.getElementById('tasks-container').innerHTML = `
+    <div class="loading-state">
+      <div class="spinner"></div>
+      <span>Fetching your tasks from Wealthbox…</span>
+    </div>`;
+}
+
+function getFilteredTasks() {
+  let tasks = state.tasks;
+  if (state.overdueOnly) {
+    const today = todayStr();
+    tasks = tasks.filter(t => t.due_date && t.due_date < today);
+  }
+  if (state.activeFilter !== 'all') {
+    const f = state.activeFilter;
+    tasks = tasks.filter(t => {
+      const cat = (t.category || '').toLowerCase();
+      const tags = (t.tags || []).map(x => x.toLowerCase());
+      return cat === f || tags.includes(f);
     });
-  });
-}
-function drawStars() {
-  STAR_LAYERS.forEach((layer, li) => {
-    ctx.fillStyle = `rgba(255,255,255,${0.4 + li * 0.2})`;
-    layer.stars.forEach(s => {
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, layer.sz, 0, Math.PI * 2);
-      ctx.fill();
-    });
-  });
+  }
+  return tasks;
 }
 
-// ─── Terrain ─────────────────────────────────────────────────────────────────
-const SEG_W = 14;
-const SEGS  = Math.ceil(W / SEG_W) + 6;
-let tPts = [];
-let inFuelZone = false, fuelZoneLeft = 0, fuelZoneCd = 0;
+function renderTasks() {
+  const container = document.getElementById('tasks-container');
+  const tasks = getFilteredTasks();
 
-function initTerrain() {
-  tPts = []; inFuelZone = false; fuelZoneLeft = 0; fuelZoneCd = 220;
-  let y = H - 100;
-  for (let i = 0; i < SEGS + 4; i++) {
-    tPts.push({ x: i * SEG_W, y, fuel: false });
-    y = clamp(y + rnd(-22, 22), H - 210, H - 48);
+  if (tasks.length === 0 && state.tasks.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="emoji">🎉</div><h3>You're all caught up!</h3><p>No tasks due today or overdue. Great work!</p></div>`;
+    return;
+  }
+  if (tasks.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="emoji">🔍</div><h3>No tasks match this filter</h3><p>Try selecting "All" to see everything.</p></div>`;
+    return;
+  }
+
+  const today = todayStr();
+  const withPriority = tasks.map(t => ({ ...t, priority: getPriority(t), isOverdue: t.due_date < today }));
+  withPriority.sort((a, b) => {
+    if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
+    return (a.due_date || '').localeCompare(b.due_date || '');
+  });
+
+  const groups = { critical:[], high:[], medium:[], normal:[] };
+  withPriority.forEach(t => groups[t.priority].push(t));
+
+  let html = '';
+  for (const p of ['critical','high','medium','normal']) {
+    if (!groups[p].length) continue;
+    const cfg = PRIORITY_CONFIG[p];
+    html += `
+      <div class="priority-group" id="group-${p}">
+        <div class="priority-header">
+          <div class="priority-dot ${cfg.dot}"></div>
+          <span class="priority-title">${cfg.label}</span>
+          <span class="priority-count">${groups[p].length} task${groups[p].length !== 1 ? 's' : ''}</span>
+        </div>
+        ${groups[p].map(t => renderTaskCard(t)).join('')}
+      </div>`;
+  }
+  container.innerHTML = html;
+}
+
+function renderTaskCard(task) {
+  const today = todayStr();
+  const isOverdue = task.due_date && task.due_date < today;
+
+  // Meta elements
+  const metaHTML = buildMetaHTML(task, isOverdue);
+
+  // Description toggle
+  const descHTML = task.description ? `
+    <button class="task-desc-toggle" id="desc-toggle-${task.id}" onclick="toggleDesc(${task.id})">
+      <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" id="desc-icon-${task.id}"><polyline points="4,6 8,10 12,6"/></svg>
+      Details
+    </button>
+    <div class="task-desc" id="desc-${task.id}">${esc(task.description)}</div>` : '';
+
+  // Edit panel — pre-render with current values
+  const cats = [...new Set(state.tasks.map(t => t.category).filter(Boolean))];
+  const catOpts = `<option value="">— No category —</option>` +
+    cats.map(c => `<option value="${esc(c)}" ${c === task.category ? 'selected' : ''}>${esc(c)}</option>`).join('') +
+    (task.category && !cats.includes(task.category) ? `<option value="${esc(task.category)}" selected>${esc(task.category)}</option>` : '');
+
+  let assigneeHTML = '';
+  const currentAssigneeIds = (task.assignees || []).map(a => a.id);
+  if (state.wbUsers.length > 0) {
+    assigneeHTML = `<select id="edit-assignee-sel-${task.id}" class="edit-select">
+      <option value="">— Unassigned —</option>
+      ${state.wbUsers.map(u => `<option value="${u.id}" ${currentAssigneeIds.includes(u.id) ? 'selected' : ''}>${esc(u.name)}</option>`).join('')}
+    </select>`;
+  } else {
+    const curName = (task.assignees || []).map(a => a.name || `User ${a.id}`).join(', ');
+    assigneeHTML = `<input type="text" id="edit-assignee-${task.id}" class="edit-input" placeholder="Name or leave blank" value="${esc(curName)}">`;
+  }
+
+  const editPanel = `
+    <div class="edit-panel" id="edit-panel-${task.id}">
+      <div class="edit-field-full">
+        <div class="edit-label">Notes / Description</div>
+        <textarea id="edit-desc-${task.id}" class="edit-textarea" placeholder="Add notes…">${esc(task.description || '')}</textarea>
+      </div>
+      <div class="edit-panel-grid">
+        <div class="edit-field">
+          <div class="edit-label">Due Date</div>
+          <input type="date" id="edit-due-${task.id}" class="edit-input" value="${task.due_date || ''}">
+        </div>
+        <div class="edit-field">
+          <div class="edit-label">Category</div>
+          <select id="edit-cat-${task.id}" class="edit-select">${catOpts}</select>
+        </div>
+      </div>
+      <div class="edit-field-full">
+        <div class="edit-label">Assigned To${state.wbUsers.length === 0 ? ' (type name)' : ''}</div>
+        ${assigneeHTML}
+      </div>
+      <div class="edit-actions">
+        <button class="btn-save-edit" id="edit-save-btn-${task.id}" onclick="saveTaskEdit(${task.id})">Save Changes</button>
+        <button class="btn-cancel-edit" onclick="toggleEditPanel(${task.id})">Cancel</button>
+        <span class="edit-feedback" id="edit-feedback-${task.id}"></span>
+      </div>
+    </div>`;
+
+  return `
+    <div class="task-card" id="task-${task.id}" data-priority="${task.priority}">
+      <div class="task-card-header">
+        <div class="task-card-left">
+          <div class="task-name">${esc(task.name || 'Untitled Task')}</div>
+        </div>
+        <div class="task-card-actions">
+          <button class="btn-edit" id="edit-btn-${task.id}" onclick="toggleEditPanel(${task.id})" title="Edit task">✏</button>
+          <button class="btn-complete" onclick="completeTaskHandler(${task.id}, this)">✓ Complete</button>
+        </div>
+      </div>
+      <div class="task-meta" id="meta-${task.id}">${metaHTML}</div>
+      ${descHTML}
+      ${editPanel}
+    </div>`;
+}
+
+function toggleDesc(id) {
+  const desc = document.getElementById(`desc-${id}`);
+  const icon = document.getElementById(`desc-icon-${id}`);
+  if (!desc) return;
+  desc.classList.toggle('open');
+  if (icon) icon.style.transform = desc.classList.contains('open') ? 'rotate(180deg)' : '';
+}
+
+function checkEmptyGroups() {
+  ['critical','high','medium','normal'].forEach(p => {
+    const group = document.getElementById(`group-${p}`);
+    if (!group) return;
+    const cards = group.querySelectorAll('.task-card:not([style*="display: none"])');
+    if (cards.length === 0) group.remove();
+  });
+  const container = document.getElementById('tasks-container');
+  if (!container.querySelector('.task-card:not([style*="display: none"])')) {
+    container.innerHTML = `<div class="empty-state"><div class="emoji">🎉</div><h3>You're all caught up!</h3><p>No tasks due today or overdue. Great work!</p></div>`;
   }
 }
-function terrainYAt(px) {
-  for (let i = 0; i < tPts.length - 1; i++) {
-    if (tPts[i].x <= px && tPts[i+1].x > px) {
-      const t = (px - tPts[i].x) / (tPts[i+1].x - tPts[i].x);
-      return lerp(tPts[i].y, tPts[i+1].y, t);
-    }
-  }
-  return H - 60;
+
+function updateBadges() {
+  const today = todayStr();
+  const overdue  = state.tasks.filter(t => t.due_date && t.due_date < today).length;
+  const dueToday = state.tasks.filter(t => t.due_date === today).length;
+  document.getElementById('badge-overdue').textContent = `${overdue} Overdue`;
+  document.getElementById('badge-today').textContent   = `${dueToday} Due Today`;
 }
-function playerOverFuelZone() {
-  const p = gs.player, mid = p.x + p.w / 2;
-  for (let i = 0; i < tPts.length - 1; i++)
-    if (tPts[i].x <= mid && tPts[i+1].x > mid) return tPts[i].fuel;
+
+// ══════════════════════════════════════════════════════════
+//  FILTER BAR
+// ══════════════════════════════════════════════════════════
+function renderFilterBar() {
+  const chipsEl = document.getElementById('filter-chips');
+  const categories = new Set(), tags = new Set();
+  state.tasks.forEach(t => {
+    if (t.category) categories.add(t.category.toLowerCase());
+    (t.tags || []).forEach(tag => tags.add(tag.toLowerCase()));
+  });
+  const all = [
+    { key: 'all', label: 'All' },
+    ...[...categories].sort().map(c => ({ key: c, label: `📁 ${capitalize(c)}` })),
+    ...[...tags].sort().map(t  => ({ key: t, label: `# ${t}` })),
+  ];
+  chipsEl.innerHTML = all.map(f =>
+    `<span class="chip ${f.key === state.activeFilter ? 'active' : ''}" data-filter="${esc(f.key)}" onclick="toggleFilter(this,'${esc(f.key)}')">${esc(f.label)}</span>`
+  ).join('');
+  document.getElementById('overdue-filter-chip').classList.toggle('active', state.overdueOnly);
+}
+
+function toggleFilter(chip, key) {
+  state.activeFilter = key;
+  document.querySelectorAll('#filter-chips .chip').forEach(c => c.classList.remove('active'));
+  chip.classList.add('active');
+  renderTasks();
+}
+
+function toggleOverdueFilter(chip) {
+  state.overdueOnly = !state.overdueOnly;
+  chip.classList.toggle('active', state.overdueOnly);
+  renderTasks();
+}
+
+// ══════════════════════════════════════════════════════════
+//  PRIORITY ENGINE
+// ══════════════════════════════════════════════════════════
+function getPriority(task) {
+  for (const rule of state.rules) {
+    if (matchesRule(task, rule)) return rule.priority;
+  }
+  return 'normal';
+}
+
+function matchesRule(task, rule) {
+  const op  = rule.operator;
+  const val = (rule.value || '').toLowerCase();
+  if (rule.field === 'category') {
+    const cat = (task.category || '').toLowerCase();
+    return op === 'equals' ? cat === val : cat.includes(val);
+  }
+  if (rule.field === 'tag') {
+    const tags = (task.tags || []).map(t => t.toLowerCase());
+    return op === 'equals' ? tags.includes(val) : tags.some(t => t.includes(val));
+  }
+  if (rule.field === 'name') {
+    const name = (task.name || '').toLowerCase();
+    return op === 'equals' ? name === val : name.includes(val);
+  }
   return false;
 }
-function advanceTerrain(spd) {
-  for (const pt of tPts) pt.x -= spd;
-  while (tPts.length && tPts[0].x < -SEG_W * 2) tPts.shift();
-  while (tPts.length < SEGS + 4) {
-    const prev = tPts[tPts.length - 1];
-    fuelZoneCd--;
-    let fuel = false;
-    if (fuelZoneCd <= 0 && !inFuelZone) {
-      inFuelZone = true; fuelZoneLeft = 16;
-      fuelZoneCd = 320 + rndInt(0, 200);
-      addMsg('FUEL STATION AHEAD!', W/2 - 10, H/2 - 60, '#00FFFF');
-    }
-    let newY;
-    if (inFuelZone && fuelZoneLeft > 0) {
-      fuel = true; newY = H - 68;
-      if (--fuelZoneLeft === 0) inFuelZone = false;
-    } else {
-      newY = clamp(prev.y + rnd(-22, 22), H - 210, H - 48);
-    }
-    tPts.push({ x: prev.x + SEG_W, y: newY, fuel });
-  }
+
+// ══════════════════════════════════════════════════════════
+//  RULES MODAL
+// ══════════════════════════════════════════════════════════
+let editingRules = [];
+
+function openModal() {
+  editingRules = JSON.parse(JSON.stringify(state.rules));
+  renderRulesList();
+  document.getElementById('modal-overlay').classList.add('open');
+  document.getElementById('rule-value').value = '';
 }
 
-// ─── Particles ────────────────────────────────────────────────────────────────
-function spawnExplosion(x, y, big) {
-  const n = big ? 36 : 16;
-  for (let i = 0; i < n; i++) {
-    const a = Math.random() * Math.PI * 2, s = rnd(0.5, big ? 4.5 : 2.5);
-    gs.particles.push({
-      x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-      life: rndInt(18, big ? 55 : 38),
-      col: ['#FFD700','#FF8C00','#FF4500','#FFFFFF','#FF6644'][rndInt(0,4)],
-      sz: rnd(1.5, big ? 5 : 3.5),
-    });
+function closeModal() { document.getElementById('modal-overlay').classList.remove('open'); }
+function closeModalOnOverlay(e) { if (e.target === document.getElementById('modal-overlay')) closeModal(); }
+
+function addRule() {
+  const field    = document.getElementById('rule-field').value;
+  const operator = document.getElementById('rule-operator').value;
+  const value    = document.getElementById('rule-value').value.trim();
+  const priority = document.getElementById('rule-priority').value;
+  if (!value) {
+    const inp = document.getElementById('rule-value');
+    inp.focus(); inp.style.borderColor = 'var(--red)';
+    setTimeout(() => inp.style.borderColor = '', 1500);
+    return;
   }
+  editingRules.push({ field, operator, value, priority });
+  document.getElementById('rule-value').value = '';
+  renderRulesList();
 }
 
-// ─── Messages ─────────────────────────────────────────────────────────────────
-function addMsg(text, x, y, col = '#FFD700') {
-  gs.msgs.push({ text, x, y, life: 90, col });
+function deleteRule(idx) { editingRules.splice(idx, 1); renderRulesList(); }
+
+function renderRulesList() {
+  const el = document.getElementById('rules-list');
+  if (!editingRules.length) {
+    el.innerHTML = `<div class="empty-rules">No rules yet — all tasks default to Normal priority.</div>`;
+    return;
+  }
+  el.innerHTML = editingRules.map((rule, i) => {
+    const fLabel = { category:'Category', tag:'Tag', name:'Name' }[rule.field] || rule.field;
+    const oLabel = rule.operator === 'equals' ? '=' : '∋';
+    return `<div class="rule-item" draggable="true"
+      ondragstart="dragStart(event,${i})" ondragover="dragOver(event,${i})" ondrop="drop(event,${i})" ondragend="dragEnd()">
+      <span class="drag-handle" title="Drag to reorder">⠿</span>
+      <span class="rule-desc"><strong>${i+1}.</strong> ${fLabel} <strong>${oLabel}</strong> "<strong>${esc(rule.value)}</strong>"</span>
+      <span class="rule-priority-badge ${rule.priority}">${priorityEmoji(rule.priority)} ${capitalize(rule.priority)}</span>
+      <button class="btn-del-rule" onclick="deleteRule(${i})" title="Delete">✕</button>
+    </div>`;
+  }).join('');
 }
 
-// ─── Ship Drawing ─────────────────────────────────────────────────────────────
-function drawPlayerShip(x, y, w, h, col) {
-  ctx.save(); ctx.translate(x + w*.5, y + h*.5);
-  ctx.fillStyle = col;
-  ctx.beginPath();
-  ctx.moveTo( w*.5, 0); ctx.lineTo(-w*.3,-h*.35); ctx.lineTo(-w*.5, 0); ctx.lineTo(-w*.3, h*.35);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#3399FF';
-  ctx.beginPath();
-  ctx.moveTo(w*.05,0); ctx.lineTo(-w*.3,-h*.35); ctx.lineTo(-w*.1,-h*.75); ctx.lineTo(w*.1,-h*.2);
-  ctx.closePath(); ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(w*.05,0); ctx.lineTo(-w*.3, h*.35); ctx.lineTo(-w*.1, h*.75); ctx.lineTo(w*.1, h*.2);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#00FFFF';
-  ctx.beginPath(); ctx.arc(w*.15, 0, h*.22, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#FF6600';
-  ctx.beginPath(); ctx.arc(-w*.45, 0, h*.12, 0, Math.PI*2); ctx.fill();
-  ctx.restore();
-}
-function drawFighter(x, y, w, h, col) {
-  ctx.save(); ctx.translate(x+w*.5, y+h*.5); ctx.scale(-1,1);
-  ctx.fillStyle = col;
-  ctx.beginPath();
-  ctx.moveTo(w*.5,0); ctx.lineTo(-w*.3,-h*.35); ctx.lineTo(-w*.5,0); ctx.lineTo(-w*.3,h*.35);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#FF4400';
-  ctx.beginPath();
-  ctx.moveTo(w*.05,0); ctx.lineTo(-w*.3,-h*.35); ctx.lineTo(-w*.1,-h*.7); ctx.lineTo(w*.1,-h*.18);
-  ctx.closePath(); ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(w*.05,0); ctx.lineTo(-w*.3, h*.35); ctx.lineTo(-w*.1, h*.7); ctx.lineTo(w*.1, h*.18);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#FF8800';
-  ctx.beginPath(); ctx.arc(w*.15, 0, h*.22, 0, Math.PI*2); ctx.fill();
-  ctx.restore();
-}
-function drawSwooper(x, y, w, h) {
-  ctx.save(); ctx.translate(x+w*.5, y+h*.5);
-  ctx.fillStyle = '#44FF66';
-  ctx.beginPath(); ctx.ellipse(0, 0, w*.22, h*.3, 0, 0, Math.PI*2); ctx.fill();
-  ctx.fillStyle = '#22CC44';
-  ctx.beginPath(); ctx.moveTo(-w*.05,-h*.1); ctx.lineTo(-w*.5,-h*.7); ctx.lineTo(-w*.18,h*.2); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo( w*.05,-h*.1); ctx.lineTo( w*.5,-h*.7); ctx.lineTo( w*.18,h*.2); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#44FF66';
-  ctx.beginPath(); ctx.moveTo(-w*.1,h*.25); ctx.lineTo(w*.1,h*.25); ctx.lineTo(0,h*.6); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#FF0000';
-  ctx.beginPath(); ctx.arc(0, -h*.05, h*.1, 0, Math.PI*2); ctx.fill();
-  ctx.restore();
-}
-function drawBomber(x, y, w, h, hp) {
-  ctx.save(); ctx.translate(x+w*.5, y+h*.5); ctx.scale(-1,1);
-  ctx.fillStyle = '#CC3300';
-  ctx.beginPath();
-  ctx.moveTo(w*.5,0); ctx.lineTo(-w*.1,-h*.45); ctx.lineTo(-w*.5,-h*.3); ctx.lineTo(-w*.5,h*.3); ctx.lineTo(-w*.1,h*.45);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#882200';
-  ctx.beginPath(); ctx.moveTo(-w*.1,-h*.45); ctx.lineTo(w*.0,-h*.9); ctx.lineTo(w*.2,-h*.45); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(-w*.1, h*.45); ctx.lineTo(w*.0, h*.9); ctx.lineTo(w*.2, h*.45); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#FF6600';
-  ctx.beginPath(); ctx.arc(w*.3, 0, h*.3, 0, Math.PI*2); ctx.fill();
-  if (hp > 1) {
-    ctx.fillStyle = '#550000'; ctx.fillRect(-w*.5,-h*.5-8,w,6);
-    ctx.fillStyle = '#FF0000'; ctx.fillRect(-w*.5,-h*.5-8,w*(hp/3),6);
-  }
-  ctx.restore();
-}
-function drawTurret(x, y, w, h, angle) {
-  ctx.save(); ctx.translate(x+w*.5, y+h*.5);
-  ctx.fillStyle = '#886600'; ctx.fillRect(-w*.5, 0, w, h*.5);
-  ctx.fillStyle = '#AAAA00';
-  ctx.beginPath(); ctx.arc(0, 0, h*.42, 0, Math.PI*2); ctx.fill();
-  ctx.strokeStyle = '#FFEE00'; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(angle)*h*.55, Math.sin(angle)*h*.55); ctx.stroke();
-  ctx.restore();
+function saveRules() {
+  state.rules = JSON.parse(JSON.stringify(editingRules));
+  localStorage.setItem('wb_rules', JSON.stringify(state.rules));
+  closeModal();
+  renderTasks();
 }
 
-// ─── Spawners ─────────────────────────────────────────────────────────────────
-function spawnEnemy() {
-  const lv = gs.level, roll = Math.random();
-  const fPct = roll < 0.45 ? 0 : roll < 0.72 ? 1 : roll < 0.87 ? 2 : 3;
-  const types = ['fighter','swooper','bomber','turret'];
-  let type = types[fPct];
-  if (type === 'bomber' && lv < 2) type = 'fighter';
-  if (type === 'turret' && lv < 3) type = 'fighter';
-  const base = { active: true, type };
-  switch (type) {
-    case 'fighter': return { ...base,
-      x: W+20, y: rnd(50, H-HUD_H-220), w: 34, h: 16,
-      vx: -(gs.scrollSpd+1.2+lv*.18), vy: 0, hp: 1, pts: 100,
-      phase: 0, amp: rnd(0,40), freq: rnd(.025,.055), shootCd: rndInt(80,140) };
-    case 'swooper': return { ...base,
-      x: W+20, y: rnd(30,120), w: 32, h: 24,
-      vx: -(gs.scrollSpd+2.2), vy: 0, hp: 1, pts: 180,
-      t: 0, baseY: rnd(30,120), amp: rnd(70,130), shootCd: rndInt(100,180) };
-    case 'bomber': return { ...base,
-      x: W+20, y: rnd(70, H-HUD_H-240), w: 52, h: 26,
-      vx: -(gs.scrollSpd*.65), vy: 0, hp: 3, pts: 400, shootCd: rndInt(35,60) };
-    case 'turret': return { ...base,
-      x: W+20, y: 0, w: 28, h: 22, vx: -gs.scrollSpd, vy: 0,
-      hp: 2, pts: 250, angle: -Math.PI*.75, targetAngle: -Math.PI*.75, shootCd: rndInt(60,90), grounded: true };
-  }
+// Drag-to-reorder
+function dragStart(e, i) { state.draggingIndex = i; e.dataTransfer.effectAllowed = 'move'; }
+function dragOver(e, i) {
+  e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+  document.querySelectorAll('.rule-item').forEach((el, idx) => el.classList.toggle('drag-over', idx === i && i !== state.draggingIndex));
+}
+function drop(e, ti) {
+  e.preventDefault();
+  if (state.draggingIndex === null || state.draggingIndex === ti) return;
+  const [moved] = editingRules.splice(state.draggingIndex, 1);
+  editingRules.splice(ti, 0, moved);
+  state.draggingIndex = null;
+  renderRulesList();
+}
+function dragEnd() {
+  state.draggingIndex = null;
+  document.querySelectorAll('.rule-item').forEach(el => el.classList.remove('drag-over'));
 }
 
-// ─── Game State ───────────────────────────────────────────────────────────────
-let gs = null;
-function startGame() {
-  gs = {
-    state: 'play', score: 0, hiScore: (gs && gs.hiScore) || 0,
-    lives: 3, level: 1, fuel: 100, maxFuel: 100,
-    fuelDrain: 0.018, scrollSpd: 2.5, levelProg: 0, levelLen: 2400,
-    enemyTimer: 0, enemyInterval: 110, refueling: false,
-    player: { x: 110, y: H/2-20, vx: 0, vy: 0, w: 38, h: 18, shootCd: 0, invincible: 0 },
-    bullets: [], eBullets: [], enemies: [], particles: [], msgs: [],
-  };
-  initTerrain();
+// ══════════════════════════════════════════════════════════
+//  STATUS / ERROR
+// ══════════════════════════════════════════════════════════
+function showSetupStatus(type, msg) {
+  const el = document.getElementById('setup-status');
+  el.className = `status-msg ${type}`;
+  el.innerHTML = msg;
+  el.style.display = 'flex';
 }
-
-// ─── Update ───────────────────────────────────────────────────────────────────
-function update() {
-  if (!gs || gs.state !== 'play') return;
-  const p = gs.player;
-
-  // Apply joystick state to keys (overrides if joystick active)
-  if (joy.active) {
-    const dz = 12; // deadzone in screen pixels
-    keys['ArrowLeft']  = joy.dx < -dz;
-    keys['ArrowRight'] = joy.dx >  dz;
-    keys['ArrowUp']    = joy.dy < -dz;
-    keys['ArrowDown']  = joy.dy >  dz;
-  }
-
-  const spd = 4.8;
-  if (keys['ArrowLeft']  || keys['KeyA']) p.vx = -spd;
-  else if (keys['ArrowRight'] || keys['KeyD']) p.vx =  spd;
-  else p.vx *= 0.78;
-  if (keys['ArrowUp']   || keys['KeyW']) p.vy = -spd;
-  else if (keys['ArrowDown']  || keys['KeyS']) p.vy =  spd;
-  else p.vy *= 0.78;
-
-  p.x = clamp(p.x + p.vx, 8, W*.58 - p.w);
-  p.y = clamp(p.y + p.vy, 8, H - HUD_H - p.h - 2);
-
-  const terrY = terrainYAt(p.x + p.w*.5);
-  if (p.y + p.h >= terrY - 1) {
-    if (playerOverFuelZone()) {
-      gs.refueling = true;
-      if (gs.fuel < gs.maxFuel) {
-        gs.fuel = Math.min(gs.maxFuel, gs.fuel + 1.1);
-        sfxRefuel();
-        if (gs.fuel >= gs.maxFuel) addMsg('TANK FULL!', p.x+20, p.y-20, '#00FF00');
-      }
-      p.y = terrY - p.h - 1;
-    } else if (!p.invincible) { killPlayer(); return; }
-  } else { gs.refueling = false; }
-
-  gs.fuel -= gs.fuelDrain;
-  if (gs.fuel <= 0) { gs.fuel = 0; killPlayer(); return; }
-  if (gs.fuel < 20 && Math.floor(Date.now()/500)%2===0 && !gs._fuelWarn) {
-    gs._fuelWarn = true;
-    addMsg('LOW FUEL!', p.x, p.y - 24, '#FF4400');
-  }
-  if (gs.fuel >= 20) gs._fuelWarn = false;
-
-  if (p.invincible > 0) p.invincible--;
-  if (p.shootCd > 0) p.shootCd--;
-  if ((keys['Space'] || keys['KeyZ']) && p.shootCd === 0) {
-    gs.bullets.push({ x: p.x+p.w, y: p.y+p.h/2-2, w: 14, h: 5, vx: 11, vy: 0 });
-    p.shootCd = 11;
-    sfxShoot();
-  }
-
-  advanceTerrain(gs.scrollSpd);
-  gs.bullets  = gs.bullets.filter(b => { b.x += b.vx; return b.x < W+20; });
-  gs.eBullets = gs.eBullets.filter(b => {
-    b.x += b.vx; b.y += b.vy;
-    return b.x > -20 && b.x < W+20 && b.y > -20 && b.y < H;
-  });
-
-  gs.enemyTimer++;
-  if (gs.enemyTimer >= gs.enemyInterval) {
-    gs.enemyTimer = 0;
-    const e = spawnEnemy();
-    if (e.type === 'turret') e.y = terrainYAt(e.x) - e.h;
-    if (Math.random() < 0.25 && e.type === 'fighter') {
-      const n = rndInt(2,3);
-      for (let i = 0; i < n; i++) {
-        const fe = spawnEnemy(); fe.type = 'fighter';
-        fe.x = W+20+i*55; fe.y = rnd(50, H-HUD_H-220);
-        gs.enemies.push(fe);
-      }
-    } else { gs.enemies.push(e); }
-    gs.enemyInterval = Math.max(38, 110 - gs.level*7);
-  }
-
-  for (const e of gs.enemies) {
-    if (!e.active) continue;
-    e.x += e.vx;
-    if (e.type === 'fighter') { e.phase += e.freq; e.y += Math.sin(e.phase)*e.amp*.012; e.y = clamp(e.y, 30, H-HUD_H-200); }
-    else if (e.type === 'swooper') { e.t += .055; e.y = e.baseY + Math.sin(e.t)*e.amp; e.y = clamp(e.y, 20, H-HUD_H-180); }
-    else if (e.type === 'turret') { e.y = terrainYAt(e.x+e.w*.5)-e.h; e.targetAngle = Math.atan2(p.y-e.y, p.x-e.x); e.angle = lerp(e.angle, e.targetAngle, .04); }
-    e.shootCd--;
-    if (e.shootCd <= 0) {
-      e.shootCd = rndInt(50,100);
-      const dx = p.x-e.x, dy = p.y-e.y, d = Math.hypot(dx,dy);
-      if (d < 500 && e.type !== 'turret') {
-        const spd2 = 3.5 + gs.level*.15;
-        gs.eBullets.push({ x:e.x, y:e.y+e.h*.5, w:9, h:4, vx:-spd2*.8+(dx/d)*spd2*.4, vy:(dy/d)*spd2*.55 });
-      }
-      if (e.type === 'turret') {
-        const spd2 = 4.5, a = e.angle;
-        gs.eBullets.push({ x:e.x+e.w*.5+Math.cos(a)*e.h*.55, y:e.y+e.h*.5+Math.sin(a)*e.h*.55, w:9, h:4, vx:Math.cos(a)*spd2, vy:Math.sin(a)*spd2 });
-      }
-    }
-    if (e.x + e.w < -40) { e.active = false; continue; }
-    for (const b of gs.bullets) {
-      if (b.vx > 0 && rectHit(b, e)) {
-        b.x = -9999; e.hp--;
-        if (e.hp <= 0) {
-          e.active = false;
-          spawnExplosion(e.x+e.w*.5, e.y+e.h*.5, e.type==='bomber');
-          sfxExplosion(e.type==='bomber');
-          gs.score += e.pts;
-          addMsg('+'+e.pts, e.x+e.w*.5, e.y-8);
-        } else sfxHit();
-        break;
-      }
-    }
-    if (!e.active) continue;
-    if (!p.invincible && rectHit(p, e)) { killPlayer(); return; }
-  }
-  gs.enemies = gs.enemies.filter(e => e.active);
-
-  if (!p.invincible) {
-    for (const b of gs.eBullets) {
-      if (rectHit(p, b)) { b.x = -9999; killPlayer(); return; }
-    }
-  }
-
-  for (const pt of gs.particles) { pt.x += pt.vx; pt.y += pt.vy; pt.vy += .06; pt.life--; }
-  gs.particles = gs.particles.filter(pt => pt.life > 0);
-  for (const m of gs.msgs) { m.y -= .5; m.life--; }
-  gs.msgs = gs.msgs.filter(m => m.life > 0);
-  updateStars();
-
-  gs.levelProg += gs.scrollSpd;
-  if (gs.levelProg >= gs.levelLen) {
-    gs.levelProg = 0; gs.level++;
-    gs.scrollSpd = Math.min(6.5, 2.5 + gs.level*.28);
-    gs.fuelDrain = Math.min(.055, .018 + gs.level*.004);
-    sfxLevelUp();
-    addMsg('LEVEL ' + gs.level, W/2, H/2-30, '#FFD700');
-  }
+function showError(title, msg) {
+  document.getElementById('error-title').textContent = title;
+  document.getElementById('error-msg').innerHTML = msg;
+  document.getElementById('error-state').classList.add('show');
+  document.getElementById('tasks-container').innerHTML = '';
 }
+function hideError() { document.getElementById('error-state').classList.remove('show'); }
 
-function killPlayer() {
-  const p = gs.player;
-  spawnExplosion(p.x+p.w*.5, p.y+p.h*.5, true); sfxExplosion(true);
-  gs.lives--;
-  if (gs.lives <= 0) { gs.hiScore = Math.max(gs.hiScore, gs.score); gs.state = 'over'; sfxGameOver(); return; }
-  p.x = 110; p.y = H/2-20; p.vx = 0; p.vy = 0; p.invincible = 200;
-  gs.fuel = gs.maxFuel; gs.eBullets = [];
-  addMsg('SHIP LOST!', W/2, H/2-20, '#FF4444');
+// ══════════════════════════════════════════════════════════
+//  UTILITIES
+// ══════════════════════════════════════════════════════════
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
-
-// ─── Draw ─────────────────────────────────────────────────────────────────────
-function draw() {
-  ctx.fillStyle = '#00000E'; ctx.fillRect(0, 0, W, H-HUD_H);
-  ctx.fillStyle = '#0A0A0A'; ctx.fillRect(0, H-HUD_H, W, HUD_H);
-  drawStars();
-
-  if (!gs || gs.state === 'title') { drawTitle(); return; }
-
-  // Terrain
-  if (tPts.length > 1) {
-    ctx.beginPath(); ctx.moveTo(0, H-HUD_H);
-    ctx.lineTo(tPts[0].x, tPts[0].y);
-    for (let i = 1; i < tPts.length; i++) ctx.lineTo(tPts[i].x, tPts[i].y);
-    ctx.lineTo(W, H-HUD_H); ctx.closePath();
-    const grd = ctx.createLinearGradient(0, H-240, 0, H-HUD_H);
-    grd.addColorStop(0,'#CC9900'); grd.addColorStop(.4,'#AA7700'); grd.addColorStop(1,'#774400');
-    ctx.fillStyle = grd; ctx.fill();
-    ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(tPts[0].x, tPts[0].y);
-    for (let i = 1; i < tPts.length; i++) ctx.lineTo(tPts[i].x, tPts[i].y);
-    ctx.stroke();
-    // Fuel zone labels
-    let inFZ = false, fzStart = 0;
-    for (let i = 0; i < tPts.length; i++) {
-      if (tPts[i].fuel && !inFZ) { inFZ = true; fzStart = tPts[i].x; }
-      if (!tPts[i].fuel && inFZ) {
-        inFZ = false;
-        const midX = (fzStart + tPts[i].x)*.5, ty = terrainYAt(midX);
-        ctx.save(); ctx.fillStyle='#00FFFF'; ctx.shadowColor='#00FFFF'; ctx.shadowBlur=6;
-        ctx.font='bold 11px Courier New'; ctx.textAlign='center';
-        ctx.fillText('◆ FUEL ◆', midX, ty-8); ctx.restore();
-        ctx.fillStyle='rgba(0,200,200,0.08)';
-        ctx.fillRect(fzStart, ty-4, tPts[i].x-fzStart, H-HUD_H-ty+4);
-      }
-    }
-  }
-
-  // Enemies
-  for (const e of gs.enemies) {
-    if (!e.active) continue;
-    if      (e.type==='fighter') drawFighter(e.x, e.y, e.w, e.h, '#FF5533');
-    else if (e.type==='swooper') drawSwooper(e.x, e.y, e.w, e.h);
-    else if (e.type==='bomber')  drawBomber(e.x, e.y, e.w, e.h, e.hp);
-    else if (e.type==='turret')  drawTurret(e.x, e.y, e.w, e.h, e.angle);
-  }
-
-  // Player
-  const p = gs.player;
-  const blink = p.invincible > 0 && Math.floor(p.invincible/6)%2===0;
-  if (!blink) {
-    drawPlayerShip(p.x, p.y, p.w, p.h, '#5599FF');
-    const fl = rnd(6,14);
-    const fg = ctx.createLinearGradient(p.x-2,p.y+p.h*.5,p.x-2-fl,p.y+p.h*.5);
-    fg.addColorStop(0,'#FF8800'); fg.addColorStop(1,'rgba(255,100,0,0)');
-    ctx.fillStyle=fg; ctx.beginPath(); ctx.ellipse(p.x-4,p.y+p.h*.5,fl,4,0,0,Math.PI*2); ctx.fill();
-  }
-  if (gs.refueling) {
-    ctx.save(); ctx.fillStyle='#00FF88'; ctx.font='bold 11px Courier New';
-    ctx.textAlign='center'; ctx.fillText('REFUELING', p.x+p.w*.5, p.y-8); ctx.restore();
-  }
-
-  // Player bullets
-  for (const b of gs.bullets) {
-    const gr = ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,5);
-    gr.addColorStop(0,'#FFFFFF'); gr.addColorStop(.4,'#FFE000'); gr.addColorStop(1,'rgba(255,180,0,0)');
-    ctx.fillStyle=gr; ctx.beginPath(); ctx.ellipse(b.x,b.y+b.h*.5,6,3,0,0,Math.PI*2); ctx.fill();
-  }
-  // Enemy bullets
-  for (const b of gs.eBullets) {
-    const gr = ctx.createRadialGradient(b.x,b.y,0,b.x,b.y,5);
-    gr.addColorStop(0,'#FFFFFF'); gr.addColorStop(.4,'#FF6600'); gr.addColorStop(1,'rgba(255,60,0,0)');
-    ctx.fillStyle=gr; ctx.beginPath(); ctx.ellipse(b.x,b.y+b.h*.5,5,3,.3,0,Math.PI*2); ctx.fill();
-  }
-
-  // Particles
-  for (const pt of gs.particles) {
-    ctx.globalAlpha = clamp(pt.life/30, 0, 1);
-    ctx.fillStyle = pt.col;
-    ctx.fillRect(pt.x-pt.sz*.5, pt.y-pt.sz*.5, pt.sz, pt.sz);
-  }
-  ctx.globalAlpha = 1;
-
-  // Messages
-  for (const m of gs.msgs) {
-    ctx.save(); ctx.globalAlpha = clamp(m.life/40,0,1);
-    ctx.fillStyle=m.col; ctx.shadowColor=m.col; ctx.shadowBlur=10;
-    ctx.font='bold 15px Courier New'; ctx.textAlign='center';
-    ctx.fillText(m.text, m.x, m.y); ctx.restore();
-  }
-
-  drawHUD();
-
-  // ── On-canvas virtual controls hint (touch devices, during play) ──
-  const isTouch = window.matchMedia('(pointer: coarse)').matches;
-  if (isTouch && gs.state === 'play') {
-    // Left: joystick visualiser
-    if (joy.active) {
-      const r = C.getBoundingClientRect();
-      const sx = W / r.width, sy = H / r.height;
-      const cx = (joy.cx - r.left) * sx;
-      const cy = (joy.cy - r.top)  * sy;
-      const dx = clamp(joy.dx * sx, -44, 44);
-      const dy = clamp(joy.dy * sy, -44, 44);
-      ctx.save(); ctx.globalAlpha = 0.35;
-      ctx.strokeStyle = '#FFD700'; ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(cx, cy, 44, 0, Math.PI*2); ctx.stroke();
-      ctx.fillStyle = 'rgba(255,215,0,0.55)';
-      ctx.beginPath(); ctx.arc(cx+dx, cy+dy, 18, 0, Math.PI*2); ctx.fill();
-      ctx.restore();
-    }
-    // Right: fire zone hint
-    ctx.save(); ctx.globalAlpha = 0.12;
-    ctx.fillStyle = keys['Space'] ? '#FF4444' : '#553333';
-    ctx.beginPath(); ctx.roundRect(W*.58, H-HUD_H-100, W*.42-4, 92, 12); ctx.fill();
-    if (!keys['Space']) {
-      ctx.globalAlpha = 0.3; ctx.fillStyle = '#FF4444';
-      ctx.font = 'bold 14px Courier New'; ctx.textAlign = 'center';
-      ctx.fillText('TAP TO FIRE', W*.79, H-HUD_H-44);
-    }
-    ctx.restore();
-  }
-
-  if (gs.state === 'pause') drawPause();
-  if (gs.state === 'over')  drawGameOver();
+function formatDate(str) {
+  if (!str) return '';
+  const [y,m,d] = str.split('-');
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return `${months[parseInt(m,10)-1]} ${parseInt(d,10)}, ${y}`;
 }
-
-function drawHUD() {
-  const y0 = H - HUD_H + 1;
-  ctx.fillStyle='#FFD700'; ctx.font='bold 13px Courier New'; ctx.textAlign='left';
-  ctx.fillText('SCORE: '+String(gs.score).padStart(7,'0'), 10, y0+14);
-  ctx.fillStyle='#886600'; ctx.fillText('HI: '+String(gs.hiScore).padStart(7,'0'), 10, y0+28);
-  const fx=195, fy=y0+6, fw=180, fh=10;
-  ctx.fillStyle='#333'; ctx.fillRect(fx,fy,fw,fh);
-  const fp=gs.fuel/gs.maxFuel;
-  ctx.fillStyle=fp>.5?'#00DD00':fp>.25?'#FFAA00':'#FF2200';
-  ctx.fillRect(fx,fy,fw*fp,fh);
-  ctx.strokeStyle='#666'; ctx.lineWidth=1; ctx.strokeRect(fx,fy,fw,fh);
-  ctx.fillStyle='#AAA'; ctx.font='10px Courier New'; ctx.textAlign='right';
-  ctx.fillText('FUEL', fx-4, fy+9);
-  const px=400, py=y0+6, pw=140, ph=10;
-  ctx.fillStyle='#113'; ctx.fillRect(px,py,pw,ph);
-  ctx.fillStyle='#0066FF'; ctx.fillRect(px,py,pw*(gs.levelProg/gs.levelLen),ph);
-  ctx.strokeStyle='#444'; ctx.strokeRect(px,py,pw,ph);
-  ctx.fillStyle='#FFD700'; ctx.font='bold 11px Courier New'; ctx.textAlign='center';
-  ctx.fillText('LEVEL '+gs.level, px+pw*.5, py+9);
-  ctx.fillStyle='#5599FF'; ctx.font='bold 14px Courier New'; ctx.textAlign='right';
-  ctx.fillText('SHIPS: '+'▶'.repeat(Math.max(0,gs.lives)), W-10, y0+16);
-  ctx.fillStyle='#446644'; ctx.font='11px Courier New';
-  ctx.fillText('TOF '+String(gs.score*4).padStart(7,'0'), W-10, y0+28);
+function esc(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
-
-function drawPause() {
-  ctx.fillStyle='rgba(0,0,0,0.55)'; ctx.fillRect(0,0,W,H);
-  ctx.textAlign='center';
-  ctx.shadowColor='#FFD700'; ctx.shadowBlur=20;
-  ctx.fillStyle='#FFD700'; ctx.font='bold 42px Courier New'; ctx.fillText('PAUSED', W/2, H/2);
-  ctx.shadowBlur=0; ctx.fillStyle='#AAA'; ctx.font='16px Courier New';
-  const isTouch = window.matchMedia('(pointer: coarse)').matches;
-  ctx.fillText(isTouch ? 'Tap ⏸ to resume' : 'Press P to resume', W/2, H/2+34);
+function capitalize(str) { return str ? str.charAt(0).toUpperCase() + str.slice(1) : ''; }
+function priorityEmoji(p) { return {critical:'🔴',high:'🟠',medium:'🟡',normal:'⚪'}[p]||''; }
+function isCorsLike(err) {
+  const m = (err.message||err.toString()).toLowerCase();
+  return m.includes('failed to fetch')||m.includes('networkerror')||m.includes('cors')||m.includes('cross-origin')||m.includes('load failed');
 }
-
-function drawGameOver() {
-  ctx.fillStyle='rgba(0,0,0,0.65)'; ctx.fillRect(0,0,W,H);
-  ctx.textAlign='center';
-  ctx.shadowColor='#FF0000'; ctx.shadowBlur=30;
-  ctx.fillStyle='#FF3333'; ctx.font='bold 52px Courier New'; ctx.fillText('GAME OVER', W/2, H/2-50);
-  ctx.shadowBlur=0; ctx.fillStyle='#FFD700'; ctx.font='24px Courier New';
-  ctx.fillText('SCORE: '+String(gs.score).padStart(7,'0'), W/2, H/2+4);
-  ctx.fillStyle='#888'; ctx.font='16px Courier New';
-  ctx.fillText('HI-SCORE: '+String(gs.hiScore).padStart(7,'0'), W/2, H/2+32);
-  const blink = Math.floor(Date.now()/550)%2===0;
-  if (blink) {
-    ctx.fillStyle='#00FFFF'; ctx.font='bold 17px Courier New';
-    const isTouch = window.matchMedia('(pointer: coarse)').matches;
-    ctx.fillText(isTouch ? 'TAP FIRE TO PLAY AGAIN' : 'PRESS ENTER or SPACE TO PLAY AGAIN', W/2, H/2+70);
-  }
-}
-
-function drawTitle() {
-  const t = Date.now()*.0008;
-  ctx.fillStyle='#8B6500'; ctx.beginPath(); ctx.moveTo(0,H-10);
-  for (let x=0; x<=W; x+=6) {
-    ctx.lineTo(x, H-35-Math.abs(Math.sin(x*.028+t)*28+Math.sin(x*.065)*14));
-  }
-  ctx.lineTo(W,H-10); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle='#FFD700'; ctx.lineWidth=2; ctx.beginPath();
-  for (let x=0; x<=W; x+=6) {
-    const y=H-35-Math.abs(Math.sin(x*.028+t)*28+Math.sin(x*.065)*14);
-    x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
-  }
-  ctx.stroke();
-  ctx.textAlign='center';
-  ctx.shadowColor='#FFD700'; ctx.shadowBlur=40;
-  ctx.fillStyle='#FFD700'; ctx.font='bold 80px Courier New'; ctx.fillText('PARSEC', W/2, 120);
-  ctx.shadowBlur=0;
-  ctx.fillStyle='#00FFFF'; ctx.font='18px Courier New'; ctx.fillText('B R O W S E R   E D I T I O N', W/2, 155);
-  ctx.fillStyle='#666'; ctx.font='12px Courier New'; ctx.fillText('Inspired by the classic TI-99/4A game (1982)', W/2, 178);
-  const bx=W/2-230, by=210, bw=460, bh=155;
-  ctx.fillStyle='rgba(0,20,40,0.7)'; ctx.strokeStyle='#336'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.roundRect(bx,by,bw,bh,8); ctx.fill(); ctx.stroke();
-  const isTouch = window.matchMedia('(pointer: coarse)').matches;
-  const lines = isTouch
-    ? [['D-PAD (below)','Move ship'],['FIRE (below)','Shoot'],['⏸ (below)','Pause'],['',''],['FLY LOW OVER ◆ FUEL ◆ ZONES TO REFUEL',''],['SHOOT ENEMIES FOR POINTS — SURVIVE!','']]
-    : [['ARROWS / WASD','Move ship'],['SPACE or Z','Fire'],['P','Pause'],['',''],['FLY LOW OVER ◆ FUEL ◆ ZONES TO REFUEL',''],['SHOOT ENEMIES FOR POINTS — SURVIVE!','']];
-  ctx.font='14px Courier New';
-  lines.forEach(([k,v],i) => {
-    ctx.textAlign='left'; ctx.fillStyle='#FFD700';
-    if (v) ctx.fillText(k, bx+20, by+28+i*22);
-    else { ctx.fillStyle='#77BBAA'; ctx.textAlign='center'; ctx.fillText(k, W/2, by+28+i*22); }
-    if (v) { ctx.fillStyle='#AAA'; ctx.fillText(v, bx+230, by+28+i*22); }
-  });
-  const blink = Math.floor(Date.now()/520)%2===0;
-  if (blink) {
-    ctx.shadowColor='#00FF88'; ctx.shadowBlur=12;
-    ctx.fillStyle='#00FF88'; ctx.font='bold 19px Courier New'; ctx.textAlign='center';
-    ctx.fillText(isTouch ? '▶  TAP FIRE TO START  ◀' : '▶  PRESS ENTER or SPACE TO START  ◀', W/2, 400);
-    ctx.shadowBlur=0;
-  }
-  const dt = Date.now()*.001;
-  drawPlayerShip(80+Math.sin(dt)*10, 55+Math.cos(dt*.7)*8, 38, 18, '#5599FF');
-  drawFighter(W-130+Math.sin(dt+1)*12, 50+Math.cos(dt*.8)*10, 34, 16, '#FF5533');
-}
-
-// ─── Loop ─────────────────────────────────────────────────────────────────────
-function loop() { update(); draw(); requestAnimationFrame(loop); }
-
-gs = { state: 'title', hiScore: 0 };
-initTerrain();
-loop();
 </script>
 </body>
 </html>
